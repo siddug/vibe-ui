@@ -8,10 +8,12 @@ import {
   sendFollowUp,
   killSession,
   interruptSession,
+  updateSessionMode,
   type Session,
   type ExecutionProcess,
   type ProcessLog,
   type ApprovalRequest,
+  type ApprovalMode,
 } from '@/lib/api';
 import { useLogStream, type LogMessage } from '@/hooks/useLogStream';
 import { useApprovalStream } from '@/hooks/useApprovalStream';
@@ -230,6 +232,18 @@ export default function SessionDetailPage() {
     }
   };
 
+  const handleToggleMode = async () => {
+    if (!session) return;
+    const newMode: ApprovalMode = session.approvalMode === 'manual' ? 'auto' : 'manual';
+    try {
+      await updateSessionMode(sessionId, { approvalMode: newMode });
+      // Update local state
+      setSession({ ...session, approvalMode: newMode });
+    } catch (err) {
+      alert(err instanceof Error ? err.message : 'Failed to update approval mode');
+    }
+  };
+
   const handleInterrupt = async () => {
     try {
       await interruptSession(sessionId);
@@ -279,6 +293,18 @@ export default function SessionDetailPage() {
               <span className="font-mono text-xs text-gray-500">{session.id.slice(0, 12)}...</span>
             </div>
             <div className="flex items-center gap-2">
+              {/* Approval Mode Toggle */}
+              <button
+                onClick={handleToggleMode}
+                className={`px-3 py-1 rounded-full text-xs font-medium transition-colors ${
+                  session.approvalMode === 'auto'
+                    ? 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300 hover:bg-green-200 dark:hover:bg-green-900/50'
+                    : 'bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 hover:bg-blue-200 dark:hover:bg-blue-900/50'
+                }`}
+                title={`Click to switch to ${session.approvalMode === 'auto' ? 'manual' : 'auto'} mode`}
+              >
+                {session.approvalMode === 'auto' ? 'AUTO APPROVE' : 'MANUAL'}
+              </button>
               <ProviderBadge provider={session.connectorType} />
               <StatusBadge status={session.status} />
             </div>
@@ -292,6 +318,27 @@ export default function SessionDetailPage() {
           </div>
         </div>
       </header>
+
+      {/* Auto mode indicator - sticky banner */}
+      {session.approvalMode === 'auto' && (
+        <div className="flex-shrink-0 bg-green-50 dark:bg-green-900/30 border-b border-green-300 dark:border-green-700 sticky top-[60px] z-10">
+          <div className="max-w-5xl mx-auto px-4 py-2">
+            <div className="flex items-center justify-center gap-2 text-green-700 dark:text-green-300 text-sm">
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+              </svg>
+              <span className="font-medium">AUTO APPROVE MODE</span>
+              <span className="text-green-600 dark:text-green-400">- All tool calls are being auto-approved</span>
+              <button
+                onClick={handleToggleMode}
+                className="ml-2 px-2 py-0.5 text-xs rounded bg-green-200 dark:bg-green-800 hover:bg-green-300 dark:hover:bg-green-700 transition-colors"
+              >
+                Switch to Manual
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Messages Area (Scrollable) */}
       <div
@@ -339,8 +386,8 @@ export default function SessionDetailPage() {
             );
           })}
 
-          {/* Inline Approval Requests */}
-          {pendingApprovals.length > 0 && (
+          {/* Inline Approval Requests - only show in manual mode */}
+          {pendingApprovals.length > 0 && session.approvalMode === 'manual' && (
             <div id="inline-approvals" className="space-y-3 p-4 rounded-xl border-2 border-cyan-500 bg-cyan-50 dark:bg-cyan-900/20 animate-pulse-slow">
               <div className="flex items-center gap-2">
                 <span className="text-cyan-600 dark:text-cyan-400 font-medium">

@@ -2,14 +2,32 @@
  * vibe-server API client
  */
 
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3456';
+// Extend Window interface for Electron
+declare global {
+  interface Window {
+    electronAPI?: {
+      getServerStatus: () => Promise<string>;
+      restartServer: () => Promise<string>;
+      stopServer: () => Promise<string>;
+    };
+  }
+}
+
+// Check if running in Electron environment
+const API_BASE = typeof window !== 'undefined' && window.electronAPI
+  ? 'http://localhost:3456'
+  : (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3456');
 
 // Types
+// Approval mode type
+export type ApprovalMode = 'manual' | 'auto';
+
 export interface Session {
   id: string;
   connectorType: string;
   workDir: string;
   status: 'running' | 'completed' | 'failed' | 'killed';
+  approvalMode: ApprovalMode; // 'manual' requires user approval, 'auto' auto-approves
   agentSessionId?: string | null; // Agent's own session ID (e.g., Claude's UUID)
   createdAt: string;
   updatedAt: string;
@@ -73,6 +91,7 @@ export interface CreateSessionRequest {
   workDir: string;
   prompt: string;
   env?: Record<string, string>;
+  approvalMode?: ApprovalMode;
 }
 
 export interface CreateSessionResponse {
@@ -81,7 +100,18 @@ export interface CreateSessionResponse {
   connectorType: string;
   workDir: string;
   status: string;
+  approvalMode: ApprovalMode;
   createdAt: string;
+}
+
+export interface UpdateModeRequest {
+  approvalMode: ApprovalMode;
+}
+
+export interface UpdateModeResponse {
+  status: string;
+  sessionId: string;
+  approvalMode: ApprovalMode;
 }
 
 export interface FollowUpRequest {
@@ -185,6 +215,17 @@ export async function interruptSession(
 ): Promise<{ status: string; sessionId: string }> {
   return fetchApi(`/api/sessions/${sessionId}/interrupt`, {
     method: 'POST',
+  });
+}
+
+// Update session approval mode
+export async function updateSessionMode(
+  sessionId: string,
+  data: UpdateModeRequest
+): Promise<UpdateModeResponse> {
+  return fetchApi(`/api/sessions/${sessionId}/mode`, {
+    method: 'PATCH',
+    body: JSON.stringify(data),
   });
 }
 
