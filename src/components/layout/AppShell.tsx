@@ -2,7 +2,9 @@
 
 import { type ReactNode } from 'react';
 import { useSidebar } from '@/contexts/SidebarContext';
+import { useViewMode } from '@/contexts/ViewModeContext';
 import { Sidebar } from './Sidebar';
+import { KanbanView } from './KanbanView';
 
 interface AppShellProps {
   children: ReactNode;
@@ -10,6 +12,12 @@ interface AppShellProps {
 
 export function AppShell({ children }: AppShellProps) {
   const { isCollapsed, toggle } = useSidebar();
+  const { viewMode } = useViewMode();
+
+  // If kanban mode, render the KanbanView instead of the sidebar layout
+  if (viewMode === 'kanban') {
+    return <KanbanView />;
+  }
 
   return (
     <div className="flex h-screen overflow-hidden">

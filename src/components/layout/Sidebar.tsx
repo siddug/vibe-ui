@@ -2,8 +2,10 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
+import Link from 'next/link';
 import { useSidebar } from '@/contexts/SidebarContext';
 import { useTheme } from '@/contexts/ThemeContext';
+import { useViewMode } from '@/contexts/ViewModeContext';
 import { getSessions, type Session } from '@/lib/api';
 import { Spinner } from '@/components/ui';
 
@@ -12,6 +14,7 @@ export function Sidebar() {
   const pathname = usePathname();
   const { isCollapsed, toggle } = useSidebar();
   const { theme, toggleTheme } = useTheme();
+  const { toggleViewMode } = useViewMode();
   const [sessions, setSessions] = useState<Session[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -48,14 +51,16 @@ export function Sidebar() {
 
   const getStatusColor = (status: string) => {
     switch (status) {
+      case 'triage':
+        return 'bg-yellow-500';
+      case 'in_progress':
       case 'running':
-        return 'bg-blue-500'; // Blue for running
+        return 'bg-blue-500';
       case 'completed':
-        return 'bg-green-500'; // Green for completed
+        return 'bg-green-500';
       case 'failed':
-        return 'bg-red-500'; // Red for failed
       case 'killed':
-        return 'bg-gray-500'; // Gray for killed
+        return 'bg-red-500';
       default:
         return 'bg-gray-400';
     }
@@ -68,6 +73,27 @@ export function Sidebar() {
         <div className="flex items-center justify-between mb-3">
           <span className="font-semibold text-lg">vibe-ui</span>
           <div className="flex items-center gap-1">
+            {/* Kanban View Toggle */}
+            <button
+              onClick={toggleViewMode}
+              className="p-2 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors"
+              title="Switch to Kanban view"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 17V7m0 10a2 2 0 01-2 2H5a2 2 0 01-2-2V7a2 2 0 012-2h2a2 2 0 012 2m0 10a2 2 0 002 2h2a2 2 0 002-2M9 7a2 2 0 012-2h2a2 2 0 012 2m0 10V7m0 10a2 2 0 002 2h2a2 2 0 002-2V7a2 2 0 00-2-2h-2a2 2 0 00-2 2" />
+              </svg>
+            </button>
+            {/* Settings Link */}
+            <Link
+              href="/settings"
+              className="p-2 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors"
+              title="Settings"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+              </svg>
+            </Link>
             {/* Theme Toggle */}
             <button
               onClick={toggleTheme}
@@ -138,9 +164,9 @@ export function Sidebar() {
               >
                 {/* Status Dot */}
                 <span className={`flex-shrink-0 w-2 h-2 rounded-full ${getStatusColor(session.status)}`} />
-                {/* Session ID - show more characters */}
-                <span className="flex-1 font-mono text-xs truncate">
-                  {session.id.slice(0, 24)}{session.id.length > 24 ? '...' : ''}
+                {/* Session Name or ID */}
+                <span className="flex-1 truncate">
+                  {session.sessionName || `Session ${session.id.slice(0, 8)}`}
                 </span>
               </button>
             ))}

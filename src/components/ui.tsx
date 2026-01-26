@@ -122,13 +122,25 @@ export function Badge({ children, variant = 'default', className = '' }: BadgePr
 // Status badge helper
 export function StatusBadge({ status }: { status: string }) {
   const variantMap: Record<string, BadgeProps['variant']> = {
-    running: 'info',
+    triage: 'warning',
+    in_progress: 'info',
+    running: 'info', // Legacy support
     completed: 'success',
     failed: 'error',
-    killed: 'warning',
+    killed: 'warning', // Legacy support
   };
 
-  return <Badge variant={variantMap[status] || 'default'}>{status}</Badge>;
+  // Display friendly labels
+  const labelMap: Record<string, string> = {
+    triage: 'Triage',
+    in_progress: 'In Progress',
+    running: 'Running',
+    completed: 'Completed',
+    failed: 'Failed',
+    killed: 'Killed',
+  };
+
+  return <Badge variant={variantMap[status] || 'default'}>{labelMap[status] || status}</Badge>;
 }
 
 // Provider badge helper - shows the AI provider with distinct styling
@@ -221,9 +233,10 @@ interface DialogProps {
   onClose: () => void;
   children: React.ReactNode;
   title?: string;
+  className?: string;
 }
 
-export function Dialog({ open, onClose, children, title }: DialogProps) {
+export function Dialog({ open, onClose, children, title, className = 'max-w-lg' }: DialogProps) {
   if (!open) return null;
 
   return (
@@ -232,7 +245,7 @@ export function Dialog({ open, onClose, children, title }: DialogProps) {
         className="fixed inset-0 bg-black/50"
         onClick={onClose}
       />
-      <div className="relative bg-[var(--card-bg)] rounded-lg shadow-xl max-w-lg w-full mx-4 max-h-[90vh] overflow-auto">
+      <div className={`relative bg-[var(--card-bg)] rounded-lg shadow-xl w-full mx-4 max-h-[90vh] overflow-auto ${className}`}>
         {title && (
           <div className="px-4 py-3 border-b border-[var(--card-border)] flex items-center justify-between">
             <h2 className="text-lg font-semibold">{title}</h2>
@@ -246,9 +259,35 @@ export function Dialog({ open, onClose, children, title }: DialogProps) {
             </button>
           </div>
         )}
-        <div className="p-4">{children}</div>
+        <div className="p-0">{children}</div>
       </div>
     </div>
+  );
+}
+
+// Dropdown/Select component
+interface DropdownProps {
+  value: string;
+  onChange: (value: string) => void;
+  options: { value: string; label: string }[];
+  className?: string;
+  disabled?: boolean;
+}
+
+export function Dropdown({ value, onChange, options, className = '', disabled = false }: DropdownProps) {
+  return (
+    <select
+      value={value}
+      onChange={(e) => onChange(e.target.value)}
+      disabled={disabled}
+      className={`px-3 py-1.5 text-sm rounded-md border border-[var(--input-border)] bg-[var(--input-bg)] focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 cursor-pointer transition-colors ${className} ${disabled ? 'opacity-50 cursor-not-allowed' : ''}`}
+    >
+      {options.map((option) => (
+        <option key={option.value} value={option.value} className="bg-[var(--card-bg)] text-[var(--text-primary)]">
+          {option.label}
+        </option>
+      ))}
+    </select>
   );
 }
 

@@ -15,18 +15,21 @@ declare global {
 
 // Check if running in Electron environment
 const API_BASE = typeof window !== 'undefined' && window.electronAPI
-  ? 'http://localhost:3456'
-  : (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3456');
+  ? 'http://localhost:7778'
+  : (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:7778');
 
 // Types
 // Approval mode type
 export type ApprovalMode = 'manual' | 'auto';
 
+export type SessionStatus = 'triage' | 'in_progress' | 'completed' | 'failed';
+
 export interface Session {
   id: string;
   connectorType: string;
   workDir: string;
-  status: 'running' | 'completed' | 'failed' | 'killed';
+  sessionName?: string | null;
+  status: SessionStatus;
   approvalMode: ApprovalMode; // 'manual' requires user approval, 'auto' auto-approves
   agentSessionId?: string | null; // Agent's own session ID (e.g., Claude's UUID)
   createdAt: string;
@@ -38,7 +41,7 @@ export interface Session {
 export interface ExecutionProcess {
   id: string;
   sessionId: string;
-  status: 'running' | 'completed' | 'failed' | 'killed';
+  status: 'running' | 'completed' | 'failed';
   prompt: string;
   exitCode: number | null;
   createdAt: string;
@@ -84,6 +87,15 @@ export interface ConnectorsResponse {
 export interface SessionsResponse {
   sessions: Session[];
   total: number;
+  limit: number;
+  offset: number;
+  hasMore: boolean;
+}
+
+export interface GetSessionsParams {
+  status?: SessionStatus;
+  limit?: number;
+  offset?: number;
 }
 
 export interface CreateSessionRequest {
@@ -92,6 +104,8 @@ export interface CreateSessionRequest {
   prompt: string;
   env?: Record<string, string>;
   approvalMode?: ApprovalMode;
+  sessionName?: string;
+  startImmediately?: boolean;
 }
 
 export interface CreateSessionResponse {
@@ -99,7 +113,8 @@ export interface CreateSessionResponse {
   processId: string;
   connectorType: string;
   workDir: string;
-  status: string;
+  sessionName?: string | null;
+  status: SessionStatus;
   approvalMode: ApprovalMode;
   createdAt: string;
 }
@@ -135,6 +150,33 @@ export interface ApprovalResponse {
 
 export interface CreateSessionWithApprovalsRequest extends CreateSessionRequest {
   enableApprovals?: boolean;
+}
+
+export interface UpdateSessionRequest {
+  sessionName?: string;
+}
+
+export interface UpdateSessionStatusRequest {
+  status: SessionStatus;
+}
+
+// API Key types
+export interface ApiKey {
+  id: string;
+  provider: string;
+  apiKey: string; // Masked
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ApiKeysResponse {
+  apiKeys: ApiKey[];
+  total: number;
+}
+
+export interface SaveApiKeyRequest {
+  provider: string;
+  apiKey: string;
 }
 
 // API Functions
@@ -175,8 +217,13 @@ export async function getConnectors(): Promise<ConnectorsResponse> {
 }
 
 // Sessions
-export async function getSessions(): Promise<SessionsResponse> {
-  return fetchApi('/api/sessions');
+export async function getSessions(params?: GetSessionsParams): Promise<SessionsResponse> {
+  const searchParams = new URLSearchParams();
+  if (params?.status) searchParams.set('status', params.status);
+  if (params?.limit) searchParams.set('limit', String(params.limit));
+  if (params?.offset) searchParams.set('offset', String(params.offset));
+  const query = searchParams.toString();
+  return fetchApi(`/api/sessions${query ? `?${query}` : ''}`);
 }
 
 export async function getSession(id: string): Promise<Session> {
@@ -215,6 +262,28 @@ export async function interruptSession(
 ): Promise<{ status: string; sessionId: string }> {
   return fetchApi(`/api/sessions/${sessionId}/interrupt`, {
     method: 'POST',
+  });
+}
+
+// Update session properties (name, etc.)
+export async function updateSession(
+  sessionId: string,
+  data: UpdateSessionRequest
+): Promise<{ status: string; sessionId: string; sessionName?: string }> {
+  return fetchApi(`/api/sessions/${sessionId}`, {
+    method: 'PATCH',
+    body: JSON.stringify(data),
+  });
+}
+
+// Update session status
+export async function updateSessionStatus(
+  sessionId: string,
+  data: UpdateSessionStatusRequest
+): Promise<{ status: string; sessionId: string; newStatus: SessionStatus }> {
+  return fetchApi(`/api/sessions/${sessionId}/status`, {
+    method: 'PATCH',
+    body: JSON.stringify(data),
   });
 }
 
@@ -269,4 +338,36 @@ export async function respondToApproval(
 export function getWebSocketUrl(endpoint: string): string {
   const wsBase = API_BASE.replace(/^http/, 'ws');
   return `${wsBase}${endpoint}`;
+}
+
+// API Keys
+export async function getApiKeys(): Promise<ApiKeysResponse> {
+  return fetchApi('/api/settings/api-keys');
+}
+
+export async function checkApiKey(
+  provider: string
+): Promise<{ exists: boolean; provider: string; apiKey?: string }> {
+  try {
+    return await fetchApi(`/api/settings/api-keys/${provider}`);
+  } catch {
+    return { exists: false, provider };
+  }
+}
+
+export async function saveApiKey(
+  data: SaveApiKeyRequest
+): Promise<{ status: string; id: string; provider: string; apiKey: string }> {
+  return fetchApi('/api/settings/api-keys', {
+    method: 'POST',
+    body: JSON.stringify(data),
+  });
+}
+
+export async function deleteApiKey(
+  provider: string
+): Promise<{ status: string; provider: string }> {
+  return fetchApi(`/api/settings/api-keys/${provider}`, {
+    method: 'DELETE',
+  });
 }
