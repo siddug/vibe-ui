@@ -1,6 +1,7 @@
 'use client';
 
 import { ButtonHTMLAttributes, forwardRef, InputHTMLAttributes, TextareaHTMLAttributes } from 'react';
+import { Listbox, ListboxButton, ListboxOption, ListboxOptions } from '@headlessui/react';
 
 // Button component
 interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
@@ -97,7 +98,7 @@ export function CardContent({ children, className = '' }: CardProps) {
 // Badge component
 interface BadgeProps {
   children: React.ReactNode;
-  variant?: 'default' | 'success' | 'warning' | 'error' | 'info';
+  variant?: 'default' | 'success' | 'warning' | 'error' | 'info' | 'approval';
   className?: string;
 }
 
@@ -108,6 +109,7 @@ export function Badge({ children, variant = 'default', className = '' }: BadgePr
     warning: 'bg-yellow-100 dark:bg-yellow-900/30 text-yellow-800 dark:text-yellow-300',
     error: 'bg-red-100 dark:bg-red-900/30 text-red-800 dark:text-red-300',
     info: 'bg-blue-100 dark:bg-blue-900/30 text-blue-800 dark:text-blue-300',
+    approval: 'bg-cyan-100 dark:bg-cyan-900/30 text-cyan-800 dark:text-cyan-300',
   };
 
   return (
@@ -128,6 +130,7 @@ export function StatusBadge({ status }: { status: string }) {
     completed: 'success',
     failed: 'error',
     killed: 'warning', // Legacy support
+    approval: 'approval',
   };
 
   // Display friendly labels
@@ -138,6 +141,7 @@ export function StatusBadge({ status }: { status: string }) {
     completed: 'Completed',
     failed: 'Failed',
     killed: 'Killed',
+    approval: 'Awaiting Approval',
   };
 
   return <Badge variant={variantMap[status] || 'default'}>{labelMap[status] || status}</Badge>;
@@ -266,30 +270,126 @@ export function Dialog({ open, onClose, children, title, className = 'max-w-lg' 
 }
 
 // Dropdown/Select component
+interface DropdownOption {
+  value: string;
+  label: string;
+  icon?: React.ReactNode;
+}
+
 interface DropdownProps {
   value: string;
   onChange: (value: string) => void;
-  options: { value: string; label: string }[];
+  options: DropdownOption[];
   className?: string;
   disabled?: boolean;
+  placeholder?: string;
+  size?: 'sm' | 'md';
 }
 
-export function Dropdown({ value, onChange, options, className = '', disabled = false }: DropdownProps) {
+export function Dropdown({ value, onChange, options, className = '', disabled = false, placeholder, size = 'md' }: DropdownProps) {
+  const selectedOption = options.find((opt) => opt.value === value);
+
+  const sizeStyles = {
+    sm: {
+      button: 'py-1 pl-2 pr-6 text-xs rounded',
+      iconContainer: 'pr-1.5',
+      icon: 'h-4 w-4',
+      option: 'py-1.5 pl-7 pr-3',
+      checkIcon: 'pl-2 h-7 w-5',
+    },
+    md: {
+      button: 'py-1.5 pl-3 pr-8 text-sm rounded-md',
+      iconContainer: 'pr-2',
+      icon: 'h-4 w-4',
+      option: 'py-2 pl-2 pr-4',
+      checkIcon: 'pl-3 h-4 w-4',
+    },
+  };
+
+  const styles = sizeStyles[size];
+
   return (
-    <select
-      value={value}
-      onChange={(e) => onChange(e.target.value)}
-      disabled={disabled}
-      className={`px-3 py-1.5 text-sm rounded-md border border-[var(--input-border)] bg-[var(--input-bg)] focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 cursor-pointer transition-colors ${className} ${disabled ? 'opacity-50 cursor-not-allowed' : ''}`}
-    >
-      {options.map((option) => (
-        <option key={option.value} value={option.value} className="bg-[var(--card-bg)] text-[var(--text-primary)]">
-          {option.label}
-        </option>
-      ))}
-    </select>
+    <Listbox value={value} onChange={onChange} disabled={disabled}>
+      <div className={`relative ${className}`}>
+        <ListboxButton
+          className={`relative w-full cursor-pointer border border-[var(--input-border)] bg-[var(--input-bg)] ${styles.button} text-left focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors ${disabled ? 'opacity-50 cursor-not-allowed' : ''}`}
+        >
+          <span className="flex items-center gap-2 truncate">
+            {selectedOption?.icon}
+            {selectedOption?.label || placeholder || 'Select...'}
+          </span>
+          <span className={`pointer-events-none absolute inset-y-0 right-0 flex items-center ${styles.iconContainer}`}>
+            <svg className={`${styles.icon} text-gray-400`} viewBox="0 0 20 20" fill="currentColor">
+              <path fillRule="evenodd" d="M5.23 7.21a.75.75 0 011.06.02L10 11.168l3.71-3.938a.75.75 0 111.08 1.04l-4.25 4.5a.75.75 0 01-1.08 0l-4.25-4.5a.75.75 0 01.02-1.06z" clipRule="evenodd" />
+            </svg>
+          </span>
+        </ListboxButton>
+
+        <ListboxOptions
+          anchor="bottom"
+          className={`absolute z-50 mt-1 max-h-60 min-w-[120px] w-max overflow-auto rounded-md bg-[var(--card-bg)] py-1 ${size === 'sm' ? 'text-xs' : 'text-sm'} shadow-lg ring-1 ring-black/5 focus:outline-none`}
+        >
+          {options.map((option) => (
+            <ListboxOption
+              key={option.value}
+              value={option.value}
+              className={`group relative cursor-pointer select-none ${styles.option} text-[var(--text-primary)] data-[focus]:bg-blue-600 data-[focus]:text-white`}
+            >
+              {({ selected }) => (
+                <>
+                  <span className={`flex items-center gap-2 truncate ${selected ? 'font-medium' : 'font-normal'}`}>
+                    {option.icon}
+                    {option.label}
+                  </span>
+                  {selected && (
+                    <span className={`absolute inset-y-0 left-0 flex items-center ${styles.checkIcon} text-blue-600 group-data-[focus]:text-white`}>
+                      <svg className="h-7 w-6" viewBox="0 0 20 20" fill="currentColor">
+                        <path fillRule="evenodd" d="M16.704 4.153a.75.75 0 01.143 1.052l-8 10.5a.75.75 0 01-1.127.075l-4.5-4.5a.75.75 0 011.06-1.06l3.894 3.893 7.48-9.817a.75.75 0 011.05-.143z" clipRule="evenodd" />
+                      </svg>
+                    </span>
+                  )}
+                </>
+              )}
+            </ListboxOption>
+          ))}
+        </ListboxOptions>
+      </div>
+    </Listbox>
   );
 }
+
+// IconButton component - just an icon that's clickable (no button background)
+interface IconButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
+  variant?: 'default' | 'primary' | 'danger' | 'warning';
+  size?: 'sm' | 'md' | 'lg';
+}
+
+export const IconButton = forwardRef<HTMLButtonElement, IconButtonProps>(
+  ({ className = '', variant = 'default', size = 'md', disabled, ...props }, ref) => {
+    const variants = {
+      default: 'text-gray-400 hover:text-gray-600 dark:hover:text-gray-300',
+      primary: 'text-blue-500 hover:text-blue-600 dark:text-blue-400 dark:hover:text-blue-300',
+      danger: 'text-red-500 hover:text-red-600 dark:text-red-400 dark:hover:text-red-300',
+      warning: 'text-yellow-500 hover:text-yellow-600 dark:text-yellow-400 dark:hover:text-yellow-300',
+    };
+
+    const sizes = {
+      sm: 'p-1',
+      md: 'p-1.5',
+      lg: 'p-2',
+    };
+
+    return (
+      <button
+        ref={ref}
+        disabled={disabled}
+        className={`inline-flex items-center justify-center rounded transition-colors focus:outline-none disabled:opacity-50 disabled:cursor-not-allowed ${variants[variant]} ${sizes[size]} ${className}`}
+        {...props}
+      />
+    );
+  }
+);
+IconButton.displayName = 'IconButton';
 
 // Loading spinner
 export function Spinner({ className = '' }: { className?: string }) {

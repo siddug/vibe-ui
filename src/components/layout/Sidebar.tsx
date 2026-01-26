@@ -71,7 +71,7 @@ export function Sidebar() {
       {/* Header */}
       <div className="flex-shrink-0 p-3 border-b border-[var(--sidebar-border)]">
         <div className="flex items-center justify-between mb-3">
-          <span className="font-semibold text-lg">vibe-ui</span>
+          <span className="font-semibold text-lg">VibeX</span>
           <div className="flex items-center gap-1">
             {/* Kanban View Toggle */}
             <button

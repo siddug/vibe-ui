@@ -1,6 +1,7 @@
 'use client';
 
 import { type Connector } from '@/lib/api';
+import { Dropdown, AILogo } from '@/components/ui';
 
 interface ConnectorSelectorProps {
   connectors: Connector[];
@@ -8,27 +9,31 @@ interface ConnectorSelectorProps {
   onChange: (value: string) => void;
 }
 
+function getConnectorIcon(connectorName: string) {
+  return <AILogo provider={connectorName} className="w-5 h-5" />;
+}
+
 export function ConnectorSelector({ connectors, value, onChange }: ConnectorSelectorProps) {
   const availableConnectors = connectors.filter((c) => c.status === 'available');
 
+  const options = availableConnectors.length > 0
+    ? availableConnectors.map((connector) => ({
+        value: connector.name,
+        label: connector.displayName,
+        icon: getConnectorIcon(connector.name),
+      }))
+    : [{ value: '', label: 'No connectors available' }];
+
   return (
-    <div className="flex items-center gap-2">
-      <select
+    <div className="w-full">
+      <label className="block text-sm font-medium mb-2">Connector</label>
+      <Dropdown
         value={value}
-        onChange={(e) => onChange(e.target.value)}
-        className="px-3 py-1.5 text-sm rounded-lg border border-[var(--input-border)] bg-[var(--input-bg)] focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-      >
-        {availableConnectors.map((connector) => (
-          <option key={connector.name} value={connector.name}>
-            {connector.displayName}
-          </option>
-        ))}
-        {availableConnectors.length === 0 && (
-          <option value="" disabled>
-            No connectors available
-          </option>
-        )}
-      </select>
+        onChange={onChange}
+        options={options}
+        disabled={availableConnectors.length === 0}
+        className="w-full"
+      />
     </div>
   );
 }

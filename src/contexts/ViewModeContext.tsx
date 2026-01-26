@@ -12,7 +12,7 @@ interface ViewModeContextType {
 
 const ViewModeContext = createContext<ViewModeContextType | undefined>(undefined);
 
-const STORAGE_KEY = 'vibe-view-mode';
+const STORAGE_KEY = 'vibex-view-mode';
 
 interface ViewModeProviderProps {
   children: ReactNode;

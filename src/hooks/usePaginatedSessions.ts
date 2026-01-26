@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { getSessions, type Session, type SessionStatus } from '@/lib/api';
 
 const PAGE_SIZE = 10;
-const STATUSES: SessionStatus[] = ['triage', 'in_progress', 'completed', 'failed'];
+const STATUSES: SessionStatus[] = ['triage', 'in_progress', 'approval', 'completed', 'failed'];
 
 interface ColumnState {
   sessions: Session[];
@@ -27,6 +27,7 @@ const initialColumnState: ColumnState = {
 const initialState: ColumnsState = {
   triage: { ...initialColumnState },
   in_progress: { ...initialColumnState },
+  approval: { ...initialColumnState },
   completed: { ...initialColumnState },
   failed: { ...initialColumnState },
 };

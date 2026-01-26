@@ -10,15 +10,16 @@ import {
   type SessionStatus,
 } from '@/lib/api';
 import { usePaginatedSessions } from '@/hooks/usePaginatedSessions';
-import { Spinner, Button, StatusBadge, ProviderBadge } from '@/components/ui';
+import { Spinner } from '@/components/ui';
 import { SessionCreateModal } from '@/components/session/SessionCreateModal';
 import { SessionDetailModal } from '@/components/session/SessionDetailModal';
 
-const COLUMNS: { status: SessionStatus; title: string; color: string }[] = [
-  { status: 'triage', title: 'Triage', color: 'border-yellow-500' },
-  { status: 'in_progress', title: 'In Progress', color: 'border-blue-500' },
-  { status: 'completed', title: 'Completed', color: 'border-green-500' },
-  { status: 'failed', title: 'Failed', color: 'border-red-500' },
+const COLUMNS: { status: SessionStatus; title: string; color: string; bgColor: string }[] = [
+  { status: 'triage', title: 'No status', color: 'bg-gray-400', bgColor: 'bg-gray-50 dark:bg-gray-800/50' },
+  { status: 'in_progress', title: 'In progress', color: 'bg-yellow-400', bgColor: 'bg-yellow-50/30 dark:bg-yellow-900/10' },
+  { status: 'approval', title: 'Awaiting Approval', color: 'bg-cyan-400', bgColor: 'bg-cyan-50/30 dark:bg-cyan-900/10' },
+  { status: 'completed', title: 'Completed', color: 'bg-green-400', bgColor: 'bg-green-50/30 dark:bg-green-900/10' },
+  { status: 'failed', title: 'Failed', color: 'bg-red-400', bgColor: 'bg-red-50/30 dark:bg-red-900/10' },
 ];
 
 export function KanbanView() {
@@ -136,19 +137,20 @@ export function KanbanView() {
       </header>
 
       {/* Kanban Columns */}
-      <div className="flex-1 overflow-x-auto p-4">
+      <div className="flex-1 overflow-x-auto p-3 bg-gray-100 dark:bg-gray-900">
         {isInitialLoading ? (
           <div className="flex items-center justify-center h-full">
             <Spinner className="h-8 w-8 text-blue-600" />
           </div>
         ) : (
-          <div className="flex gap-4 h-full min-w-max min-h-full">
+          <div className="flex gap-3 h-full min-w-max min-h-full">
             {COLUMNS.map((column) => (
               <KanbanColumn
                 key={column.status}
                 status={column.status}
                 title={column.title}
                 color={column.color}
+                bgColor={column.bgColor}
                 sessions={columns[column.status].sessions}
                 hasMore={columns[column.status].hasMore}
                 loading={columns[column.status].loading}
@@ -192,6 +194,7 @@ interface KanbanColumnProps {
   status: SessionStatus;
   title: string;
   color: string;
+  bgColor: string;
   sessions: Session[];
   hasMore: boolean;
   loading: boolean;
@@ -211,6 +214,7 @@ function KanbanColumn({
   status,
   title,
   color,
+  bgColor,
   sessions,
   hasMore,
   loading,
@@ -227,30 +231,35 @@ function KanbanColumn({
 }: KanbanColumnProps) {
   return (
     <div
-      className={`flex flex-col w-80 h-full bg-[var(--card-bg)] rounded-lg border-t-4 ${color} ${
-        isDragOver ? 'ring-2 ring-blue-500' : ''
+      className={`flex flex-col w-72 h-full ${bgColor} rounded-lg ${
+        isDragOver ? 'ring-2 ring-blue-400' : ''
       }`}
       onDragOver={onDragOver}
       onDragLeave={onDragLeave}
       onDrop={onDrop}
     >
       {/* Column Header */}
-      <div className="flex items-center justify-between p-3 border-b border-[var(--card-border)]">
+      <div className="flex items-center justify-between px-3 py-2.5">
         <div className="flex items-center gap-2">
-          <h2 className="font-semibold">{title}</h2>
-          <span className="px-2 py-0.5 text-xs bg-gray-200 dark:bg-gray-700 rounded-full">
+          <div className={`w-1 h-4 rounded-full ${color}`} />
+          <h2 className="font-medium text-sm text-gray-700 dark:text-gray-200">{title}</h2>
+          <span className="text-sm text-gray-400">
             {sessions.length}{hasMore ? '+' : ''}
           </span>
         </div>
-        {status === 'triage' && (
-          <Button size="sm" onClick={onCreateClick}>
-            + New
-          </Button>
-        )}
+        <button
+          onClick={onCreateClick}
+          className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-colors"
+          title="Add new session"
+        >
+          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+          </svg>
+        </button>
       </div>
 
       {/* Column Content */}
-      <div className="flex-1 overflow-y-auto p-2 space-y-2">
+      <div className="flex-1 overflow-y-auto px-2 pb-2 space-y-2">
         {sessions.map((session) => (
           <SessionCard
             key={session.id}
@@ -262,7 +271,7 @@ function KanbanColumn({
           />
         ))}
         {sessions.length === 0 && !loading && (
-          <div className="text-center text-gray-500 text-sm py-8">
+          <div className="text-center text-gray-400 text-sm py-8">
             No sessions
           </div>
         )}
@@ -278,6 +287,16 @@ function KanbanColumn({
             <Spinner className="h-5 w-5 text-blue-600" />
           </div>
         )}
+        {/* Add New button at bottom */}
+        <button
+          onClick={onCreateClick}
+          className="flex items-center gap-2 w-full px-3 py-2 text-sm text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 hover:bg-white/50 dark:hover:bg-gray-700/50 rounded-lg transition-colors"
+        >
+          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+          </svg>
+          New
+        </button>
       </div>
     </div>
   );
@@ -320,6 +339,41 @@ function ScrollSentinel({ onIntersect, hasMore, loading }: ScrollSentinelProps) 
   return <div ref={sentinelRef} className="h-4" />;
 }
 
+// Priority Badge Component - maps session status to priority display
+function PriorityBadge({ status }: { status: SessionStatus }) {
+  const config: Record<SessionStatus, { label: string; color: string; icon: string }> = {
+    failed: { label: 'High', color: 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400', icon: '🔥' },
+    in_progress: { label: 'Medium', color: 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400', icon: '⭐' },
+    approval: { label: 'Action', color: 'bg-cyan-100 text-cyan-700 dark:bg-cyan-900/30 dark:text-cyan-400', icon: '⏳' },
+    triage: { label: 'Low', color: 'bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-400', icon: '○' },
+    completed: { label: 'Done', color: 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400', icon: '✓' },
+  };
+  const { label, color, icon } = config[status];
+
+  return (
+    <span className={`inline-flex items-center gap-1 px-2 py-0.5 text-xs font-medium rounded-md ${color}`}>
+      {label} <span>{icon}</span>
+    </span>
+  );
+}
+
+// Category Tag Component - displays connector type as a tag
+function CategoryTag({ type }: { type: string }) {
+  const tagConfig: Record<string, { color: string; icon: string }> = {
+    claude: { color: 'bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400', icon: '⚡' },
+    vibe: { color: 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400', icon: '📘' },
+  };
+
+  const config = tagConfig[type.toLowerCase()] || { color: 'bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-400', icon: '📁' };
+  const displayName = type.charAt(0).toUpperCase() + type.slice(1);
+
+  return (
+    <span className={`inline-flex items-center gap-1 px-2 py-0.5 text-xs font-medium rounded-md ${config.color}`}>
+      {displayName} <span>{config.icon}</span>
+    </span>
+  );
+}
+
 // Session Card Component
 interface SessionCardProps {
   session: Session;
@@ -331,7 +385,30 @@ interface SessionCardProps {
 
 function SessionCard({ session, onDragStart, onDragEnd, onClick, isDragging }: SessionCardProps) {
   const displayName = session.sessionName || `Session ${session.id.slice(0, 8)}`;
-  const timeAgo = getTimeAgo(new Date(session.updatedAt));
+
+  // Derive some metadata from session for the card display
+  const createdAt = new Date(session.createdAt).toLocaleDateString();
+  const readableCreatedAtWithAgo = (() => {
+    const now = new Date();
+    const created = new Date(session.createdAt);
+    const diffMs = now.getTime() - created.getTime();
+    const diffMins = Math.floor(diffMs / 60000);
+    if (diffMins < 1) return 'just now';
+    if (diffMins < 60) return `${diffMins} min ago`;
+    const diffHours = Math.floor(diffMins / 60);
+    if (diffHours < 24) return `${diffHours} hr ago`;
+    const diffDays = Math.floor(diffHours / 24);
+    return `${diffDays} day${diffDays > 1 ? 's' : ''} ago`;
+  })();
+  const workDir = session.workDir || 'N/A';
+
+  // Calculate a "progress" percentage based on status
+  const progressPercent = session.status === 'completed' ? 100
+    : session.status === 'in_progress' ? 50
+    : session.status === 'failed' ? 0
+    : 0;
+
+  const isInProgress = session.status === 'in_progress';
 
   return (
     <div
@@ -340,32 +417,38 @@ function SessionCard({ session, onDragStart, onDragEnd, onClick, isDragging }: S
       onDragEnd={onDragEnd}
       onClick={onClick}
       className={`
-        p-3 rounded-lg border border-[var(--card-border)] bg-white dark:bg-gray-800
-        cursor-pointer hover:shadow-md transition-shadow
-        ${isDragging ? 'opacity-50' : ''}
+        p-3 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800
+        cursor-pointer hover:shadow-md transition-all
+        ${isDragging ? 'opacity-50 rotate-2 scale-105' : ''}
       `}
     >
-      <div className="flex items-start justify-between gap-2 mb-2">
-        <h3 className="font-medium text-sm truncate flex-1">{displayName}</h3>
-        <ProviderBadge provider={session.connectorType} />
+      {/* Title */}
+      <h3 className="font-medium text-sm text-gray-900 dark:text-gray-100 mb-1 line-clamp-2">
+        {displayName}
+      </h3>
+      {/* Footer: Metadata row */}
+      <div className="flex items-center justify-between text-xs text-gray-400 mb-2 dark:text-gray-500">
+        <div className="flex flex-col gap-1 overflow-hidden">
+          <div className='truncate'>{workDir}</div>
+          <div className='truncate'>{createdAt} ({readableCreatedAtWithAgo})</div>
+        </div>
       </div>
-      <div className="text-xs text-gray-500 mb-2 truncate font-mono">
-        {session.workDir}
-      </div>
-      <div className="flex items-center justify-between">
-        <StatusBadge status={session.status} />
-        <span className="text-xs text-gray-400">{timeAgo}</span>
+          {/* Tags */}
+      <div className="flex flex-wrap gap-1 mb-0">
+        <CategoryTag type={session.connectorType} />
+        {session.approvalMode === 'auto' && (
+          <span className="inline-flex items-center gap-1 px-2 py-0.5 text-xs font-medium rounded-md bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400">
+            Auto ✓
+          </span>
+        )}
+        {/* Loading spinner for in-progress sessions - bottom right */}
+        {isInProgress && (
+          <div className="ml-auto">
+            <Spinner className="h-4 w-4 text-blue-500" />
+          </div>
+        )}
       </div>
     </div>
   );
 }
 
-// Helper function to get relative time
-function getTimeAgo(date: Date): string {
-  const seconds = Math.floor((new Date().getTime() - date.getTime()) / 1000);
-
-  if (seconds < 60) return 'just now';
-  if (seconds < 3600) return `${Math.floor(seconds / 60)}m ago`;
-  if (seconds < 86400) return `${Math.floor(seconds / 3600)}h ago`;
-  return `${Math.floor(seconds / 86400)}d ago`;
-}

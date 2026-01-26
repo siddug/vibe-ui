@@ -6,7 +6,7 @@ import { ViewModeProvider } from "@/contexts/ViewModeContext";
 import { AppShell } from "@/components/layout/AppShell";
 
 export const metadata: Metadata = {
-  title: "vibe-ui",
+  title: "VibeX",
   description: "AI Agent Session Manager",
 };
 

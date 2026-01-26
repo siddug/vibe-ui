@@ -10,7 +10,7 @@ interface SidebarContextValue {
 
 const SidebarContext = createContext<SidebarContextValue | null>(null);
 
-const SIDEBAR_STORAGE_KEY = 'vibe-ui-sidebar-collapsed';
+const SIDEBAR_STORAGE_KEY = 'vibex-sidebar-collapsed';
 
 export function SidebarProvider({ children }: { children: ReactNode }) {
   const [isCollapsed, setIsCollapsed] = useState(false);

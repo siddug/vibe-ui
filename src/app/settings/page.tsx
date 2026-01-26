@@ -8,7 +8,7 @@ import {
   deleteApiKey,
   type ApiKey,
 } from '@/lib/api';
-import { Button, Input, Card, CardHeader, CardContent, Spinner } from '@/components/ui';
+import { Button, Input, Card, CardHeader, CardContent, Spinner, Dropdown } from '@/components/ui';
 
 const PROVIDERS = [
   { value: 'mistral', label: 'Mistral AI' },
@@ -152,17 +152,12 @@ export default function SettingsPage() {
               <div className="pt-4 border-t border-[var(--card-border)] space-y-3">
                 <h3 className="text-sm font-medium text-gray-500">Add New Key</h3>
                 <div className="flex gap-3">
-                  <select
+                  <Dropdown
                     value={provider}
-                    onChange={(e) => setProvider(e.target.value)}
-                    className="px-3 py-2 border border-[var(--input-border)] bg-[var(--input-bg)] rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  >
-                    {PROVIDERS.map((p) => (
-                      <option key={p.value} value={p.value}>
-                        {p.label}
-                      </option>
-                    ))}
-                  </select>
+                    onChange={setProvider}
+                    options={PROVIDERS}
+                    className="min-w-[140px]"
+                  />
                   <Input
                     type="password"
                     value={apiKeyInput}
@@ -185,7 +180,7 @@ export default function SettingsPage() {
             </CardHeader>
             <CardContent>
               <div className="text-sm text-gray-500 space-y-2">
-                <p><strong>vibe-ui</strong> - AI Agent Session Manager</p>
+                <p><strong>VibeX</strong> - AI Agent Session Manager</p>
                 <p>A web interface for managing AI coding agent sessions with vibe-server.</p>
                 <p>Features:</p>
                 <ul className="list-disc list-inside ml-2 space-y-1">

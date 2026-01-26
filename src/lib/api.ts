@@ -22,7 +22,7 @@ const API_BASE = typeof window !== 'undefined' && window.electronAPI
 // Approval mode type
 export type ApprovalMode = 'manual' | 'auto';
 
-export type SessionStatus = 'triage' | 'in_progress' | 'completed' | 'failed';
+export type SessionStatus = 'triage' | 'in_progress' | 'completed' | 'failed' | 'approval';
 
 export interface Session {
   id: string;
@@ -43,6 +43,7 @@ export interface ExecutionProcess {
   sessionId: string;
   status: 'running' | 'completed' | 'failed';
   prompt: string;
+  images?: ImageData[];
   exitCode: number | null;
   createdAt: string;
   completedAt: string | null;
@@ -106,6 +107,7 @@ export interface CreateSessionRequest {
   approvalMode?: ApprovalMode;
   sessionName?: string;
   startImmediately?: boolean;
+  images?: ImageData[];
 }
 
 export interface CreateSessionResponse {
@@ -129,8 +131,19 @@ export interface UpdateModeResponse {
   approvalMode: ApprovalMode;
 }
 
+/**
+ * Image data for messages with images
+ */
+export interface ImageData {
+  /** Base64-encoded image data (without data URL prefix) */
+  data: string;
+  /** Image media type */
+  mediaType: 'image/jpeg' | 'image/png' | 'image/gif' | 'image/webp';
+}
+
 export interface FollowUpRequest {
   prompt: string;
+  images?: ImageData[];
 }
 
 export interface ApprovalRequest {

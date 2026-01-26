@@ -6,11 +6,12 @@ import {
   createSession,
   type Connector,
   type ApprovalMode,
+  type ImageData,
 } from '@/lib/api';
 import { WorkDirSelector } from '@/components/chat/WorkDirSelector';
 import { ConnectorSelector } from '@/components/chat/ConnectorSelector';
 import { ChatInput } from '@/components/chat/ChatInput';
-import { Button, Input, Spinner } from '@/components/ui';
+import { Button, Spinner } from '@/components/ui';
 
 interface SessionCreateFormProps {
   onSessionCreated?: (sessionId: string, startedImmediately: boolean) => void;
@@ -33,9 +34,10 @@ export function SessionCreateForm({
   const [workDir, setWorkDir] = useState('~/Documents');
   const [connector, setConnector] = useState('');
   const [prompt, setPrompt] = useState('');
-  const [sessionName, setSessionName] = useState('');
   const [submitting, setSubmitting] = useState(false);
+  const [submittingToTriage, setSubmittingToTriage] = useState(false);
   const [approvalMode, setApprovalMode] = useState<ApprovalMode>('auto');
+  const [images, setImages] = useState<ImageData[]>([]);
 
   const fetchConnectors = useCallback(async () => {
     try {
@@ -59,12 +61,15 @@ export function SessionCreateForm({
   }, [fetchConnectors]);
 
   const handleSubmit = async (startImmediately: boolean = true) => {
-    if (!connector || !workDir || !prompt.trim()) {
+    if (!connector || !workDir || (!prompt.trim() && images.length === 0)) {
       setError('Please fill in all fields');
       return;
     }
 
     setSubmitting(true);
+    if (!startImmediately) {
+      setSubmittingToTriage(true);
+    }
     setError(null);
 
     try {
@@ -72,15 +77,16 @@ export function SessionCreateForm({
         connector,
         workDir,
         prompt: prompt.trim(),
-        sessionName: sessionName.trim() || undefined,
         startImmediately,
         enableApprovals: true,
         approvalMode,
+        images: images.length > 0 ? images : undefined,
       });
       onSessionCreated?.(session.id, startImmediately);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to create session');
       setSubmitting(false);
+      setSubmittingToTriage(false);
     }
   };
 
@@ -93,7 +99,7 @@ export function SessionCreateForm({
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 p-4">
       {/* Error Display */}
       {error && (
         <div className="p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg text-red-700 dark:text-red-400 text-sm">
@@ -103,31 +109,18 @@ export function SessionCreateForm({
 
       {/* Configuration Section */}
       <div className="space-y-4">
-        {/* Session Name */}
-        <div>
-          <label className="block text-sm font-medium mb-2">Session Name (optional)</label>
-          <Input
-            type="text"
-            value={sessionName}
-            onChange={(e) => setSessionName(e.target.value)}
-            placeholder="Enter a name for this session..."
-          />
-        </div>
-
         {/* Working Directory */}
         <div>
           <label className="block text-sm font-medium mb-2">Working Directory</label>
           <WorkDirSelector value={workDir} onChange={setWorkDir} />
         </div>
 
-        {/* Connector Row */}
-        <div className="flex items-center justify-between">
-          <ConnectorSelector
-            connectors={connectors}
-            value={connector}
-            onChange={setConnector}
-          />
-        </div>
+        {/* Connector */}
+        <ConnectorSelector
+          connectors={connectors}
+          value={connector}
+          onChange={setConnector}
+        />
 
         {/* Approval Mode Selector */}
         <div>
@@ -167,12 +160,15 @@ export function SessionCreateForm({
 
       {/* Chat Input */}
       <div>
+        <label className="block text-sm font-medium mb-2">Task</label>
         <ChatInput
           value={prompt}
           onChange={setPrompt}
           onSubmit={() => handleSubmit(true)}
           disabled={!connector || connectors.filter(c => c.status === 'available').length === 0}
           submitting={submitting}
+          images={images}
+          onImagesChange={setImages}
           placeholder="What would you like the agent to do? (Enter to send, Shift+Enter for new line)"
         />
       </div>
@@ -191,7 +187,7 @@ export function SessionCreateForm({
               onClick={() => handleSubmit(false)}
               disabled={!connector || !workDir || !prompt.trim() || submitting}
             >
-              {submitting ? <Spinner className="h-4 w-4 mr-2" /> : null}
+              {submittingToTriage ? <Spinner className="h-4 w-4 mr-2" /> : null}
               Save to Triage
             </Button>
           )}

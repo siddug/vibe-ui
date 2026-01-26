@@ -16,6 +16,7 @@ import {
   type ApprovalRequest,
   type ApprovalMode,
   type SessionStatus,
+  type ImageData,
 } from '@/lib/api';
 import { useLogStream, type LogMessage } from '@/hooks/useLogStream';
 import { useApprovalStream } from '@/hooks/useApprovalStream';
@@ -29,6 +30,7 @@ import {
   Spinner,
   Input,
   Dropdown,
+  IconButton,
 } from '@/components/ui';
 
 interface ConversationTurn {
@@ -56,6 +58,7 @@ export function SessionDetailView({
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [followUpPrompt, setFollowUpPrompt] = useState('');
+  const [followUpImages, setFollowUpImages] = useState<ImageData[]>([]);
   const [submitting, setSubmitting] = useState(false);
   const [conversationTurns, setConversationTurns] = useState<ConversationTurn[]>([]);
   const [showRaw, setShowRaw] = useState(false);
@@ -205,12 +208,16 @@ export function SessionDetailView({
   };
 
   const handleFollowUp = async () => {
-    if (!followUpPrompt.trim()) return;
+    if (!followUpPrompt.trim() && followUpImages.length === 0) return;
 
     setSubmitting(true);
     try {
-      await sendFollowUp(sessionId, { prompt: followUpPrompt });
+      await sendFollowUp(sessionId, {
+        prompt: followUpPrompt,
+        images: followUpImages.length > 0 ? followUpImages : undefined,
+      });
       setFollowUpPrompt('');
+      setFollowUpImages([]);
       fetchedProcessesRef.current.clear();
       setConversationTurns([]);
       fetchSession();
@@ -224,7 +231,7 @@ export function SessionDetailView({
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
-      if (!submitting && followUpPrompt.trim()) {
+      if (!submitting && (followUpPrompt.trim() || followUpImages.length > 0)) {
         handleFollowUp();
       }
     }
@@ -316,9 +323,9 @@ export function SessionDetailView({
     <div className="flex-1 flex flex-col h-full overflow-hidden">
       {/* Sticky Header */}
       <header className="flex-shrink-0 bg-[var(--card-bg)] border-b border-[var(--card-border)] sticky top-0 z-10">
-        <div className={`${maxWidthClass} mx-auto px-4 py-3`}>
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
+        <div className={`${maxWidthClass} mx-auto px-4 py-3 overflow-hidden`}>
+          <div className="flex items-center justify-between overflow-hidden w-full">
+            <div className="flex overflow-hidden gap-3">
               {showCloseButton && onClose && (
                 <button
                   onClick={onClose}
@@ -343,10 +350,12 @@ export function SessionDetailView({
                   <Button size="sm" variant="ghost" onClick={() => setEditingName(false)}>Cancel</Button>
                 </div>
               ) : (
-                <>
-                  <h1 className="text-lg font-semibold">
-                    {session.sessionName || 'Session'}
-                  </h1>
+                <div className="flex gap-2 shrink-0">
+                  <div className='truncate'>
+                    <span className="text-lg font-semibold truncate overflow-hidden">
+                      {session.sessionName || 'Session'}
+                    </span>
+                  </div>
                   <button
                     onClick={() => {
                       setNameInput(session.sessionName || '');
@@ -359,19 +368,17 @@ export function SessionDetailView({
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
                     </svg>
                   </button>
-                  <span className="font-mono text-xs text-gray-500">{session.id.slice(0, 12)}...</span>
-                </>
+                </div>
               )}
             </div>
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 shrink-0 grow-1 justify-end">
               {/* Approval Mode Toggle */}
               <button
                 onClick={handleToggleMode}
-                className={`px-3 py-1 rounded-full text-xs font-medium transition-colors ${
-                  session.approvalMode === 'auto'
+                className={`px-3 py-1 rounded-full text-xs font-medium transition-colors ${session.approvalMode === 'auto'
                     ? 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300 hover:bg-green-200 dark:hover:bg-green-900/50'
                     : 'bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 hover:bg-blue-200 dark:hover:bg-blue-900/50'
-                }`}
+                  }`}
                 title={`Click to switch to ${session.approvalMode === 'auto' ? 'manual' : 'auto'} mode`}
               >
                 {session.approvalMode === 'auto' ? 'AUTO APPROVE' : 'MANUAL'}
@@ -483,23 +490,112 @@ export function SessionDetailView({
       {/* Sticky Input Area */}
       <div className="flex-shrink-0 border-t border-[var(--card-border)] bg-[var(--card-bg)] sticky bottom-0">
         <div className={`${maxWidthClass} mx-auto px-4 py-4`}>
+          {/* Image Previews */}
+          {followUpImages.length > 0 && (
+            <div className="flex flex-wrap gap-2 mb-2">
+              {followUpImages.map((image, index) => (
+                <div key={index} className="relative group">
+                  <img
+                    src={`data:${image.mediaType};base64,${image.data}`}
+                    alt={`Attached image ${index + 1}`}
+                    className="h-16 w-16 object-cover rounded-lg border border-[var(--input-border)]"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setFollowUpImages(images => images.filter((_, i) => i !== index))}
+                    className="absolute -top-1.5 -right-1.5 w-5 h-5 bg-red-500 text-white rounded-full flex items-center justify-center text-xs opacity-0 group-hover:opacity-100 transition-opacity"
+                    title="Remove image"
+                  >
+                    &times;
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
           <div className="relative">
             <textarea
               value={followUpPrompt}
               onChange={(e) => setFollowUpPrompt(e.target.value)}
               onKeyDown={handleKeyDown}
+              onPaste={async (e) => {
+                const items = e.clipboardData?.items;
+                if (!items) return;
+                const imageItems = Array.from(items).filter(item => item.type.startsWith('image/'));
+                if (imageItems.length === 0) return;
+                e.preventDefault();
+                const newImages: ImageData[] = [];
+                for (const item of imageItems) {
+                  const file = item.getAsFile();
+                  if (file && file.size <= 20 * 1024 * 1024) {
+                    const result = await new Promise<string | null>((resolve) => {
+                      const reader = new FileReader();
+                      reader.onload = () => resolve(reader.result as string);
+                      reader.onerror = () => resolve(null);
+                      reader.readAsDataURL(file);
+                    });
+                    if (result) {
+                      const base64Data = result.split(',')[1];
+                      if (base64Data) {
+                        newImages.push({
+                          data: base64Data,
+                          mediaType: file.type as ImageData['mediaType'],
+                        });
+                      }
+                    }
+                  }
+                }
+                if (newImages.length > 0) {
+                  setFollowUpImages(prev => [...prev, ...newImages]);
+                }
+              }}
               placeholder={
                 isRunning
                   ? "Agent is working..."
                   : canFollowUp
-                  ? "Send a follow-up message... (Enter to send, Shift+Enter for new line)"
-                  : (session.status === 'completed' || session.status === 'failed') && !session.agentSessionId
-                  ? "Cannot send follow-ups: no session ID captured"
-                  : `Session ${session.status}`
+                    ? "Send a follow-up message... (Enter to send, Shift+Enter for new line, paste images)"
+                    : (session.status === 'completed' || session.status === 'failed') && !session.agentSessionId
+                      ? "Cannot send follow-ups: no session ID captured"
+                      : `Session ${session.status}`
               }
               rows={2}
               disabled={isRunning || !canFollowUp || submitting}
-              className="w-full px-4 py-3 pr-36 text-sm rounded-xl border border-[var(--input-border)] bg-[var(--input-bg)] focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none disabled:opacity-50 disabled:cursor-not-allowed"
+              className="w-full px-4 py-3 pr-44 text-sm rounded-xl border border-[var(--input-border)] bg-[var(--input-bg)] focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none disabled:opacity-50 disabled:cursor-not-allowed"
+            />
+            {/* Hidden file input for image upload */}
+            <input
+              type="file"
+              accept="image/jpeg,image/png,image/gif,image/webp"
+              multiple
+              onChange={async (e) => {
+                const files = e.target.files;
+                if (!files) return;
+                const newImages: ImageData[] = [];
+                for (const file of Array.from(files)) {
+                  if (file.size <= 20 * 1024 * 1024 && file.type.startsWith('image/')) {
+                    const result = await new Promise<string | null>((resolve) => {
+                      const reader = new FileReader();
+                      reader.onload = () => resolve(reader.result as string);
+                      reader.onerror = () => resolve(null);
+                      reader.readAsDataURL(file);
+                    });
+                    if (result) {
+                      const base64Data = result.split(',')[1];
+                      if (base64Data) {
+                        newImages.push({
+                          data: base64Data,
+                          mediaType: file.type as ImageData['mediaType'],
+                        });
+                      }
+                    }
+                  }
+                }
+                if (newImages.length > 0) {
+                  setFollowUpImages(prev => [...prev, ...newImages]);
+                }
+                e.target.value = '';
+              }}
+              className="hidden"
+              id="image-upload-input"
             />
             <div className="absolute right-3 bottom-3 flex items-center gap-1">
               {/* Session Status Dropdown - shows current stage and allows switching */}
@@ -511,50 +607,60 @@ export function SessionDetailView({
                     { value: 'completed', label: 'Completed' },
                     { value: 'failed', label: 'Failed' }
                   ]}
-                  className="text-xs"
+                  size="sm"
                 />
               )}
               {/* Spinner when agent is working */}
               {isRunning && (
                 <Spinner className="w-4 h-4 text-blue-500 mr-1" />
               )}
+              {/* Image Upload Button */}
+              <IconButton
+                onClick={() => document.getElementById('image-upload-input')?.click()}
+                disabled={isRunning || !canFollowUp || submitting}
+                title="Attach images"
+              >
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                </svg>
+              </IconButton>
               {/* Interrupt Button */}
-              <button
+              <IconButton
                 onClick={handleInterrupt}
                 disabled={!isRunning}
-                className="p-2 rounded-lg bg-yellow-500 text-white hover:bg-yellow-600 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                variant="warning"
                 title="Interrupt"
               >
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 9v6m4-6v6m7-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
+                  <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 14h2v2h-2v-2zm0-12h2v10h-2V4z" />
                 </svg>
-              </button>
+              </IconButton>
               {/* Kill Button */}
-              <button
+              <IconButton
                 onClick={handleKill}
                 disabled={!isRunning}
-                className="p-2 rounded-lg bg-red-600 text-white hover:bg-red-700 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                variant="danger"
                 title="Kill"
               >
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
+                  <path d="M12 2C6.47 2 2 6.47 2 12s4.47 10 10 10 10-4.47 10-10S17.53 2 12 2zm5 13.59L15.59 17 12 13.41 8.41 17 7 15.59 10.59 12 7 8.41 8.41 7 12 10.59 15.59 7 17 8.41 13.41 12 17 15.59z" />
                 </svg>
-              </button>
+              </IconButton>
               {/* Send Button */}
-              <button
+              <IconButton
                 onClick={handleFollowUp}
-                disabled={isRunning || !canFollowUp || submitting || !followUpPrompt.trim()}
-                className="p-2 rounded-lg bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                disabled={isRunning || !canFollowUp || submitting || (!followUpPrompt.trim() && followUpImages.length === 0)}
+                variant="primary"
                 title="Send"
               >
                 {submitting ? (
-                  <Spinner className="w-4 h-4" />
+                  <Spinner className="w-5 h-5" />
                 ) : (
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
+                  <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
+                    <path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z" />
                   </svg>
                 )}
-              </button>
+              </IconButton>
             </div>
           </div>
         </div>
@@ -969,6 +1075,20 @@ function ConversationTurnView({
           </div>
           <div className="bg-blue-50 dark:bg-blue-900/20 rounded-lg p-3 border border-blue-200 dark:border-blue-800">
             <p className="whitespace-pre-wrap">{process.prompt}</p>
+            {/* Image attachments */}
+            {process.images && process.images.length > 0 && (
+              <div className="flex flex-wrap gap-2 mt-3">
+                {process.images.map((image, index) => (
+                  <div key={index} className="relative group">
+                    <img
+                      src={`data:${image.mediaType};base64,${image.data}`}
+                      alt={`Attached image ${index + 1}`}
+                      className="h-24 w-24 object-cover rounded-lg border border-blue-200 dark:border-blue-700"
+                    />
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         </div>
       </div>
