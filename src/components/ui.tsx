@@ -249,7 +249,7 @@ export function Dialog({ open, onClose, children, title, className = 'max-w-lg' 
         className="fixed inset-0 bg-black/50"
         onClick={onClose}
       />
-      <div className={`relative bg-[var(--card-bg)] rounded-lg shadow-xl w-full mx-4 max-h-[90vh] overflow-auto ${className}`}>
+      <div className={`relative bg-[var(--card-bg)] rounded-lg shadow-xl w-full mx-4 max-h-[90vh] overflow-hidden flex flex-col ${className}`}>
         {title && (
           <div className="px-4 py-3 border-b border-[var(--card-border)] flex items-center justify-between">
             <h2 className="text-lg font-semibold">{title}</h2>
@@ -263,7 +263,7 @@ export function Dialog({ open, onClose, children, title, className = 'max-w-lg' 
             </button>
           </div>
         )}
-        <div className="p-0">{children}</div>
+        <div className="p-0 flex flex-col max-h-full overflow-y-scroll">{children}</div>
       </div>
     </div>
   );

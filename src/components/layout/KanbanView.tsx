@@ -25,7 +25,7 @@ const COLUMNS: { status: SessionStatus; title: string; color: string; bgColor: s
 export function KanbanView() {
   const { theme, toggleTheme } = useTheme();
   const { toggleViewMode } = useViewMode();
-  const { columns, loadMore, refresh, moveSessionOptimistically } = usePaginatedSessions();
+  const { columns, loadMore, refresh, smartRefresh, moveSessionOptimistically } = usePaginatedSessions();
   const [createModalOpen, setCreateModalOpen] = useState(false);
   const [selectedSessionId, setSelectedSessionId] = useState<string | null>(null);
 
@@ -33,11 +33,11 @@ export function KanbanView() {
   const [draggedSession, setDraggedSession] = useState<Session | null>(null);
   const [dragOverColumn, setDragOverColumn] = useState<SessionStatus | null>(null);
 
-  // Polling for updates
+  // Polling for updates - use smartRefresh for better sync
   useEffect(() => {
-    const interval = setInterval(refresh, 3000);
+    const interval = setInterval(smartRefresh, 2000);
     return () => clearInterval(interval);
-  }, [refresh]);
+  }, [smartRefresh]);
 
   const handleDragStart = (e: React.DragEvent, session: Session) => {
     setDraggedSession(session);

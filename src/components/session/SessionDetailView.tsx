@@ -20,6 +20,7 @@ import {
 } from '@/lib/api';
 import { useLogStream, type LogMessage } from '@/hooks/useLogStream';
 import { useApprovalStream } from '@/hooks/useApprovalStream';
+import { usePaginatedSessions } from '@/hooks/usePaginatedSessions';
 import {
   Button,
   Card,
@@ -278,11 +279,16 @@ export function SessionDetailView({
     }
   };
 
+  // Use paginated sessions hook for smart refresh
+  const { smartRefresh } = usePaginatedSessions();
+
   const handleToggleStatus = async (newStatus: SessionStatus) => {
     if (!session) return;
     try {
       await updateSessionStatus(sessionId, { status: newStatus });
       setSession({ ...session, status: newStatus });
+      // Trigger smart refresh to update Kanban view immediately
+      await smartRefresh();
     } catch (err) {
       alert(err instanceof Error ? err.message : 'Failed to update session status');
     }
@@ -325,17 +331,8 @@ export function SessionDetailView({
       <header className="flex-shrink-0 bg-[var(--card-bg)] border-b border-[var(--card-border)] sticky top-0 z-10">
         <div className={`${maxWidthClass} mx-auto px-4 py-3 overflow-hidden`}>
           <div className="flex items-center justify-between overflow-hidden w-full">
-            <div className="flex overflow-hidden gap-3">
-              {showCloseButton && onClose && (
-                <button
-                  onClick={onClose}
-                  className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 mr-2"
-                >
-                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                  </svg>
-                </button>
-              )}
+            <div className="flex overflow-hidden gap-3 mr-8">
+              
               {editingName ? (
                 <div className="flex items-center gap-2">
                   <Input
@@ -350,7 +347,7 @@ export function SessionDetailView({
                   <Button size="sm" variant="ghost" onClick={() => setEditingName(false)}>Cancel</Button>
                 </div>
               ) : (
-                <div className="flex gap-2 shrink-0">
+                <div className="flex gap-1 shrink-1 overflow-x-hidden">
                   <div className='truncate'>
                     <span className="text-lg font-semibold truncate overflow-hidden">
                       {session.sessionName || 'Session'}
@@ -371,7 +368,7 @@ export function SessionDetailView({
                 </div>
               )}
             </div>
-            <div className="flex items-center gap-2 shrink-0 grow-1 justify-end">
+            <div className="flex items-center gap-2 shrink-0 grow-1 justify-end mr-2">
               {/* Approval Mode Toggle */}
               <button
                 onClick={handleToggleMode}
@@ -386,6 +383,16 @@ export function SessionDetailView({
               <ProviderBadge provider={session.connectorType} />
               <StatusBadge status={session.status} />
             </div>
+            {showCloseButton && onClose && (
+                <button
+                  onClick={onClose}
+                  className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 mr-0 ml-4 cursor-pointer"
+                >
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              )}
           </div>
           {/* Working Directory */}
           <div className="mt-1 flex items-center gap-1.5 text-xs text-gray-500">

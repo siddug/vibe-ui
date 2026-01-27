@@ -36,6 +36,7 @@ export interface UsePaginatedSessionsResult {
   columns: ColumnsState;
   loadMore: (status: SessionStatus) => Promise<void>;
   refresh: () => Promise<void>;
+  smartRefresh: () => Promise<void>;
   updateSessionOptimistically: (sessionId: string, updates: Partial<Session>) => void;
   moveSessionOptimistically: (sessionId: string, fromStatus: SessionStatus, toStatus: SessionStatus) => void;
 }
@@ -139,7 +140,6 @@ export function usePaginatedSessions(): UsePaginatedSessionsResult {
 
           setColumns((prev) => {
             const existingSessions = prev[status].sessions;
-            const existingIds = new Set(existingSessions.map((s) => s.id));
             const newIds = new Set(data.sessions.map((s) => s.id));
 
             // Merge: new sessions first, then existing sessions not in new batch
@@ -168,6 +168,53 @@ export function usePaginatedSessions(): UsePaginatedSessionsResult {
         }
       })
     );
+  }, []);
+
+  // Optimized refresh that only updates changed sessions
+  const smartRefresh = useCallback(async () => {
+    try {
+      // Get all sessions across all statuses
+      const allSessionsResponse = await getSessions({ limit: 100, offset: 0 });
+      const allSessions = allSessionsResponse.sessions;
+      
+      setColumns((prev) => {
+        const newColumns = { ...prev };
+        let hasChanges = false;
+        
+        // Update each column based on current session statuses
+        for (const status of STATUSES) {
+          const currentSessions = prev[status].sessions;
+          const currentSessionIds = new Set(currentSessions.map(s => s.id));
+          
+          // Find sessions that should be in this column
+          const sessionsForStatus = allSessions.filter(s => s.status === status);
+          const sessionsForStatusIds = new Set(sessionsForStatus.map(s => s.id));
+          
+          // Check if there are any changes
+          const sessionsToAdd = sessionsForStatus.filter(s => !currentSessionIds.has(s.id));
+          const sessionsToRemove = currentSessions.filter(s => !sessionsForStatusIds.has(s.id));
+          
+          if (sessionsToAdd.length > 0 || sessionsToRemove.length > 0) {
+            hasChanges = true;
+            
+            // Remove sessions that no longer belong here
+            const updatedSessions = currentSessions.filter(s => sessionsForStatusIds.has(s.id));
+            
+            // Add new sessions (at the beginning for newest first)
+            const finalSessions = [...sessionsToAdd, ...updatedSessions];
+            
+            newColumns[status] = {
+              ...prev[status],
+              sessions: finalSessions,
+            };
+          }
+        }
+        
+        return hasChanges ? newColumns : prev;
+      });
+    } catch (err) {
+      console.error('Failed to smart refresh sessions:', err);
+    }
   }, []);
 
   // Optimistically update a session (e.g., after name change)
@@ -231,6 +278,7 @@ export function usePaginatedSessions(): UsePaginatedSessionsResult {
     columns,
     loadMore,
     refresh,
+    smartRefresh,
     updateSessionOptimistically,
     moveSessionOptimistically,
   };
