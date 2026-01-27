@@ -1,14 +1,15 @@
 {
-  "name": "vibe-ui",
+  "name": "vibex",
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "next dev",
+    "dev": "next dev --port 7777",
     "build": "next build",
     "start": "next start",
     "lint": "eslint"
   },
   "dependencies": {
+    "@headlessui/react": "^2.2.9",
     "next": "16.1.1",
     "react": "19.2.3",
     "react-dom": "19.2.3"
