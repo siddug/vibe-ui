@@ -15,11 +15,13 @@ import { SessionCreateModal } from '@/components/session/SessionCreateModal';
 import { SessionDetailModal } from '@/components/session/SessionDetailModal';
 
 const COLUMNS: { status: SessionStatus; title: string; color: string; bgColor: string }[] = [
-  { status: 'triage', title: 'No status', color: 'bg-gray-400', bgColor: 'bg-gray-50 dark:bg-gray-800/50' },
-  { status: 'in_progress', title: 'In progress', color: 'bg-yellow-400', bgColor: 'bg-yellow-50/30 dark:bg-yellow-900/10' },
-  { status: 'approval', title: 'Awaiting Approval', color: 'bg-cyan-400', bgColor: 'bg-cyan-50/30 dark:bg-cyan-900/10' },
-  { status: 'completed', title: 'Completed', color: 'bg-green-400', bgColor: 'bg-green-50/30 dark:bg-green-900/10' },
-  { status: 'failed', title: 'Failed', color: 'bg-red-400', bgColor: 'bg-red-50/30 dark:bg-red-900/10' },
+  { status: 'triage', title: 'Todo', color: 'bg-gray-400', bgColor: 'bg-gray-50 dark:bg-gray-800/50' },
+  { status: 'in_progress', title: 'Agent WIP', color: 'bg-yellow-400', bgColor: 'bg-yellow-50/30 dark:bg-yellow-900/10' },
+  { status: 'approval', title: 'Agent requires approval', color: 'bg-cyan-400', bgColor: 'bg-cyan-50/30 dark:bg-cyan-900/10' },
+  { status: 'completed', title: 'Agent completed', color: 'bg-green-400', bgColor: 'bg-green-50/30 dark:bg-green-900/10' },
+  { status: 'failed', title: 'Agent failed', color: 'bg-red-400', bgColor: 'bg-red-50/30 dark:bg-red-900/10' },
+  { status: 'done', title: 'Done', color: 'bg-emerald-500', bgColor: 'bg-emerald-50/30 dark:bg-emerald-900/10' },
+  { status: 'archived', title: 'Archive', color: 'bg-slate-500', bgColor: 'bg-slate-50/30 dark:bg-slate-900/10' },
 ];
 
 export function KanbanView() {
@@ -83,6 +85,30 @@ export function KanbanView() {
     setDragOverColumn(null);
   };
 
+  // Bulk move all sessions from one status to another
+  const handleBulkMove = async (fromStatus: SessionStatus, toStatus: SessionStatus) => {
+    const sessionsToMove = columns[fromStatus]?.sessions || [];
+    if (sessionsToMove.length === 0) return;
+
+    // Optimistically move all sessions
+    for (const session of sessionsToMove) {
+      moveSessionOptimistically(session.id, fromStatus, toStatus);
+    }
+
+    // Update all sessions in the API
+    try {
+      await Promise.all(
+        sessionsToMove.map((session) =>
+          updateSessionStatus(session.id, { status: toStatus })
+        )
+      );
+    } catch (err) {
+      console.error('Failed to bulk update session statuses:', err);
+      // Revert on error by refreshing
+      refresh();
+    }
+  };
+
   // Check if any column is still in initial loading
   const isInitialLoading = Object.values(columns).some((col) => col.initialLoading);
 
@@ -95,20 +121,20 @@ export function KanbanView() {
             {/* Toggle to Sidebar View */}
             <button
               onClick={toggleViewMode}
-              className="p-2 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors"
+              className="p-2 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors cursor-pointer"
               title="Switch to sidebar view"
             >
               <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
               </svg>
             </button>
-            <h1 className="text-xl font-semibold">Kanban Board</h1>
+            <h1 className="text-xl font-semibold">VibeX</h1>
           </div>
           <div className="flex items-center gap-2">
             {/* Theme Toggle */}
             <button
               onClick={toggleTheme}
-              className="p-2 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors"
+              className="p-2 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors cursor-pointer"
               title={`Switch to ${theme === 'light' ? 'dark' : 'light'} mode`}
             >
               {theme === 'light' ? (
@@ -124,7 +150,7 @@ export function KanbanView() {
             {/* Settings Link */}
             <Link
               href="/settings"
-              className="p-2 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors"
+              className="p-2 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors cursor-pointer"
               title="Settings"
             >
               <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -151,9 +177,9 @@ export function KanbanView() {
                 title={column.title}
                 color={column.color}
                 bgColor={column.bgColor}
-                sessions={columns[column.status].sessions}
-                hasMore={columns[column.status].hasMore}
-                loading={columns[column.status].loading}
+                sessions={columns[column.status]?.sessions}
+                hasMore={columns[column.status]?.hasMore}
+                loading={columns[column.status]?.loading}
                 onLoadMore={() => loadMore(column.status)}
                 onDragOver={(e) => handleDragOver(e, column.status)}
                 onDragLeave={handleDragLeave}
@@ -164,6 +190,7 @@ export function KanbanView() {
                 onCardClick={setSelectedSessionId}
                 draggedSessionId={draggedSession?.id ?? null}
                 onCreateClick={() => setCreateModalOpen(true)}
+                onBulkMove={handleBulkMove}
               />
             ))}
           </div>
@@ -208,6 +235,7 @@ interface KanbanColumnProps {
   onCardClick: (sessionId: string) => void;
   draggedSessionId: string | null;
   onCreateClick: () => void;
+  onBulkMove: (fromStatus: SessionStatus, toStatus: SessionStatus) => void;
 }
 
 function KanbanColumn({
@@ -215,7 +243,7 @@ function KanbanColumn({
   title,
   color,
   bgColor,
-  sessions,
+  sessions = [],
   hasMore,
   loading,
   onLoadMore,
@@ -228,7 +256,28 @@ function KanbanColumn({
   onCardClick,
   draggedSessionId,
   onCreateClick,
+  onBulkMove,
 }: KanbanColumnProps) {
+  const [menuOpen, setMenuOpen] = useState(false);
+  const menuRef = useRef<HTMLDivElement>(null);
+
+  // Close menu when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (menuRef.current && !menuRef.current.contains(event.target as Node)) {
+        setMenuOpen(false);
+      }
+    };
+    if (menuOpen) {
+      document.addEventListener('mousedown', handleClickOutside);
+      return () => document.removeEventListener('mousedown', handleClickOutside);
+    }
+  }, [menuOpen]);
+
+  // Show bulk actions menu for completed and failed columns
+  const showBulkActions = status === 'completed' || status === 'failed';
+  const hasSessions = sessions.length > 0;
+
   return (
     <div
       className={`flex flex-col w-72 h-full ${bgColor} rounded-lg ${
@@ -244,18 +293,64 @@ function KanbanColumn({
           <div className={`w-1 h-4 rounded-full ${color}`} />
           <h2 className="font-medium text-sm text-gray-700 dark:text-gray-200">{title}</h2>
           <span className="text-sm text-gray-400">
-            {sessions.length}{hasMore ? '+' : ''}
+            {sessions?.length}{hasMore ? '+' : ''}
           </span>
         </div>
-        <button
-          onClick={onCreateClick}
-          className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-colors"
-          title="Add new session"
-        >
-          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-          </svg>
-        </button>
+        <div className="flex items-center gap-1">
+          {/* Bulk Actions Menu - only for completed/failed columns */}
+          {showBulkActions && hasSessions && (
+            <div className="relative" ref={menuRef}>
+              <button
+                onClick={() => setMenuOpen(!menuOpen)}
+                className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-colors p-1 rounded hover:bg-gray-200 dark:hover:bg-gray-700 cursor-pointer"
+                title="Bulk actions"
+              >
+                <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
+                  <circle cx="12" cy="5" r="2" />
+                  <circle cx="12" cy="12" r="2" />
+                  <circle cx="12" cy="19" r="2" />
+                </svg>
+              </button>
+              {menuOpen && (
+                <div className="absolute right-0 top-full mt-1 w-44 bg-white dark:bg-gray-800 rounded-lg shadow-lg border border-gray-200 dark:border-gray-700 z-50 py-1">
+                  <button
+                    onClick={() => {
+                      onBulkMove(status, 'done');
+                      setMenuOpen(false);
+                    }}
+                    className="w-full text-left px-3 py-2 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 flex items-center gap-2 cursor-pointer"
+                  >
+                    <svg className="w-4 h-4 text-emerald-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                    </svg>
+                    Move all to Done
+                  </button>
+                  <button
+                    onClick={() => {
+                      onBulkMove(status, 'archived');
+                      setMenuOpen(false);
+                    }}
+                    className="w-full text-left px-3 py-2 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 flex items-center gap-2 cursor-pointer"
+                  >
+                    <svg className="w-4 h-4 text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4" />
+                    </svg>
+                    Move all to Archive
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
+          <button
+            onClick={onCreateClick}
+            className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-colors cursor-pointer"
+            title="Add new session"
+          >
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+            </svg>
+          </button>
+        </div>
       </div>
 
       {/* Column Content */}
@@ -290,7 +385,7 @@ function KanbanColumn({
         {/* Add New button at bottom */}
         <button
           onClick={onCreateClick}
-          className="flex items-center gap-2 w-full px-3 py-2 text-sm text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 hover:bg-white/50 dark:hover:bg-gray-700/50 rounded-lg transition-colors"
+          className="flex items-center gap-2 w-full px-3 py-2 text-sm text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 hover:bg-white/50 dark:hover:bg-gray-700/50 rounded-lg transition-colors cursor-pointer"
         >
           <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
@@ -347,6 +442,8 @@ function PriorityBadge({ status }: { status: SessionStatus }) {
     approval: { label: 'Action', color: 'bg-cyan-100 text-cyan-700 dark:bg-cyan-900/30 dark:text-cyan-400', icon: '⏳' },
     triage: { label: 'Low', color: 'bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-400', icon: '○' },
     completed: { label: 'Done', color: 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400', icon: '✓' },
+    done: { label: 'Done', color: 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400', icon: '✓' },
+    archived: { label: 'Archived', color: 'bg-gray-100 text-gray-500 dark:bg-gray-700 dark:text-gray-500', icon: '📦' },
   };
   const { label, color, icon } = config[status];
 
@@ -357,19 +454,36 @@ function PriorityBadge({ status }: { status: SessionStatus }) {
   );
 }
 
-// Category Tag Component - displays connector type as a tag
-function CategoryTag({ type }: { type: string }) {
-  const tagConfig: Record<string, { color: string; icon: string }> = {
-    claude: { color: 'bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400', icon: '⚡' },
-    vibe: { color: 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400', icon: '📘' },
-  };
+// Category Icon Component - displays connector type as an icon
+function CategoryIcon({ type }: { type: string }) {
+  const lowerType = type.toLowerCase();
 
-  const config = tagConfig[type.toLowerCase()] || { color: 'bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-400', icon: '📁' };
-  const displayName = type.charAt(0).toUpperCase() + type.slice(1);
+  if (lowerType === 'claude') {
+    return (
+      <img
+        src="/claude.svg"
+        alt="Claude"
+        title="Claude"
+        className="w-3 h-5"
+      />
+    );
+  }
 
+  if (lowerType === 'vibe') {
+    return (
+      <img
+        src="/m-rainbow.png"
+        alt="Vibe"
+        title="Vibe"
+        className="w-3 h-5 object-contain"
+      />
+    );
+  }
+
+  // Fallback for unknown types
   return (
-    <span className={`inline-flex items-center gap-1 px-2 py-0.5 text-xs font-medium rounded-md ${config.color}`}>
-      {displayName} <span>{config.icon}</span>
+    <span className="inline-flex items-center gap-1 px-2 py-0.5 text-xs font-medium rounded-md bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-400">
+      {type}
     </span>
   );
 }
@@ -435,10 +549,15 @@ function SessionCard({ session, onDragStart, onDragEnd, onClick, isDragging }: S
       </div>
           {/* Tags */}
       <div className="flex flex-wrap gap-1 mb-0">
-        <CategoryTag type={session.connectorType} />
+        <CategoryIcon type={session.connectorType} />
         {session.approvalMode === 'auto' && (
-          <span className="inline-flex items-center gap-1 px-2 py-0.5 text-xs font-medium rounded-md bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400">
-            Auto ✓
+          <span className="inline-flex items-center gap-1 px-2 py-0.5 text-xs font-medium rounded-md  text-green-700  dark:text-green-400">
+            Auto approval
+          </span>
+        )}
+        {session.agentMode === 'plan' && (
+          <span className="inline-flex items-center gap-1 px-2 py-0.5 text-xs font-medium rounded-md  text-purple-700 dark:text-purple-400">
+            Plan
           </span>
         )}
         {/* Loading spinner for in-progress sessions - bottom right */}

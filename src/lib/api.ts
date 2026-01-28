@@ -22,7 +22,10 @@ const API_BASE = typeof window !== 'undefined' && window.electronAPI
 // Approval mode type
 export type ApprovalMode = 'manual' | 'auto';
 
-export type SessionStatus = 'triage' | 'in_progress' | 'completed' | 'failed' | 'approval';
+// Agent mode type - controls agent behavior (plan mode vs default)
+export type AgentMode = 'default' | 'plan';
+
+export type SessionStatus = 'triage' | 'in_progress' | 'completed' | 'failed' | 'approval' | 'done' | 'archived';
 
 export interface Session {
   id: string;
@@ -31,6 +34,7 @@ export interface Session {
   sessionName?: string | null;
   status: SessionStatus;
   approvalMode: ApprovalMode; // 'manual' requires user approval, 'auto' auto-approves
+  agentMode: AgentMode; // 'default' for normal operation, 'plan' for read-only planning
   agentSessionId?: string | null; // Agent's own session ID (e.g., Claude's UUID)
   createdAt: string;
   updatedAt: string;
@@ -105,6 +109,7 @@ export interface CreateSessionRequest {
   prompt: string;
   env?: Record<string, string>;
   approvalMode?: ApprovalMode;
+  agentMode?: AgentMode;
   sessionName?: string;
   startImmediately?: boolean;
   images?: ImageData[];

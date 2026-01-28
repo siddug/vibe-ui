@@ -98,7 +98,7 @@ export function CardContent({ children, className = '' }: CardProps) {
 // Badge component
 interface BadgeProps {
   children: React.ReactNode;
-  variant?: 'default' | 'success' | 'warning' | 'error' | 'info' | 'approval';
+  variant?: 'default' | 'success' | 'warning' | 'error' | 'info' | 'approval' | 'done' | 'archived';
   className?: string;
 }
 
@@ -110,6 +110,8 @@ export function Badge({ children, variant = 'default', className = '' }: BadgePr
     error: 'bg-red-100 dark:bg-red-900/30 text-red-800 dark:text-red-300',
     info: 'bg-blue-100 dark:bg-blue-900/30 text-blue-800 dark:text-blue-300',
     approval: 'bg-cyan-100 dark:bg-cyan-900/30 text-cyan-800 dark:text-cyan-300',
+    done: 'bg-emerald-100 dark:bg-emerald-900/30 text-emerald-800 dark:text-emerald-300',
+    archived: 'bg-slate-100 dark:bg-slate-900/30 text-slate-800 dark:text-slate-300',
   };
 
   return (
@@ -131,17 +133,21 @@ export function StatusBadge({ status }: { status: string }) {
     failed: 'error',
     killed: 'warning', // Legacy support
     approval: 'approval',
+    done: 'done',
+    archived: 'archived',
   };
 
   // Display friendly labels
   const labelMap: Record<string, string> = {
-    triage: 'Triage',
-    in_progress: 'In Progress',
+    triage: 'Todo',
+    in_progress: 'Agent WIP',
     running: 'Running',
-    completed: 'Completed',
-    failed: 'Failed',
+    completed: 'Agent Completed',
+    failed: 'Agent Failed',
     killed: 'Killed',
-    approval: 'Awaiting Approval',
+    approval: 'Agent Requires Approval',
+    done: 'Done',
+    archived: 'Archived',
   };
 
   return <Badge variant={variantMap[status] || 'default'}>{labelMap[status] || status}</Badge>;
@@ -255,7 +261,7 @@ export function Dialog({ open, onClose, children, title, className = 'max-w-lg' 
             <h2 className="text-lg font-semibold">{title}</h2>
             <button
               onClick={onClose}
-              className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
+              className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 cursor-pointer"
             >
               <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
@@ -312,7 +318,7 @@ export function Dropdown({ value, onChange, options, className = '', disabled = 
     <Listbox value={value} onChange={onChange} disabled={disabled}>
       <div className={`relative ${className}`}>
         <ListboxButton
-          className={`relative w-full cursor-pointer border border-[var(--input-border)] bg-[var(--input-bg)] ${styles.button} text-left focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors ${disabled ? 'opacity-50 cursor-not-allowed' : ''}`}
+          className={`relative w-full border border-[var(--input-border)] bg-[var(--input-bg)] ${styles.button} text-left focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors ${disabled ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
         >
           <span className="flex items-center gap-2 truncate">
             {selectedOption?.icon}
@@ -383,7 +389,7 @@ export const IconButton = forwardRef<HTMLButtonElement, IconButtonProps>(
       <button
         ref={ref}
         disabled={disabled}
-        className={`inline-flex items-center justify-center rounded transition-colors focus:outline-none disabled:opacity-50 disabled:cursor-not-allowed ${variants[variant]} ${sizes[size]} ${className}`}
+        className={`inline-flex items-center justify-center rounded transition-colors focus:outline-none disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer ${variants[variant]} ${sizes[size]} ${className}`}
         {...props}
       />
     );
