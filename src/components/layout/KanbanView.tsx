@@ -501,20 +501,39 @@ function SessionCard({ session, onDragStart, onDragEnd, onClick, isDragging }: S
   const displayName = session.sessionName || `Session ${session.id.slice(0, 8)}`;
 
   // Derive some metadata from session for the card display
-  const createdAt = new Date(session.createdAt).toLocaleDateString();
-  const readableCreatedAtWithAgo = (() => {
+  const dateDisplay = (() => {
     const now = new Date();
     const created = new Date(session.createdAt);
     const diffMs = now.getTime() - created.getTime();
     const diffMins = Math.floor(diffMs / 60000);
-    if (diffMins < 1) return 'just now';
-    if (diffMins < 60) return `${diffMins} min ago`;
-    const diffHours = Math.floor(diffMins / 60);
-    if (diffHours < 24) return `${diffHours} hr ago`;
-    const diffDays = Math.floor(diffHours / 24);
-    return `${diffDays} day${diffDays > 1 ? 's' : ''} ago`;
+
+    // If today, show relative time
+    const isToday = created.toDateString() === now.toDateString();
+    if (isToday) {
+      if (diffMins < 1) return 'just now';
+      if (diffMins < 60) return `${diffMins} min ago`;
+      const diffHours = Math.floor(diffMins / 60);
+      return `${diffHours} hr ago`;
+    }
+
+    // Otherwise show readable date like "Feb 10" or "Feb 10, 2024"
+    const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    const month = months[created.getMonth()];
+    const day = created.getDate();
+    const year = created.getFullYear();
+    const currentYear = now.getFullYear();
+
+    if (year === currentYear) {
+      return `${month} ${day}`;
+    }
+    return `${month} ${day}, ${year}`;
   })();
-  const workDir = session.workDir || 'N/A';
+  const workDir = (() => {
+    if (!session.workDir) return 'N/A';
+    const parts = session.workDir.split('/').filter(Boolean);
+    if (parts.length <= 2) return session.workDir;
+    return parts.slice(-2).join('/');
+  })();
 
   // Calculate a "progress" percentage based on status
   const progressPercent = session.status === 'completed' ? 100
@@ -544,7 +563,7 @@ function SessionCard({ session, onDragStart, onDragEnd, onClick, isDragging }: S
       <div className="flex items-center justify-between text-xs text-gray-400 mb-2 dark:text-gray-500">
         <div className="flex flex-col gap-1 overflow-hidden">
           <div className='truncate'>{workDir}</div>
-          <div className='truncate'>{createdAt} ({readableCreatedAtWithAgo})</div>
+          <div className='truncate'>{dateDisplay}</div>
         </div>
       </div>
           {/* Tags */}

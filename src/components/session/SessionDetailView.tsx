@@ -425,12 +425,17 @@ export function SessionDetailView({
                 </button>
               )}
           </div>
-          {/* Working Directory */}
-          <div className="mt-1 flex items-center gap-1.5 text-xs text-gray-500">
-            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" />
-            </svg>
-            <span className="font-mono truncate">{session.workDir}</span>
+          {/* Working Directory and Session ID */}
+          <div className="mt-1 flex items-center justify-between text-xs text-gray-500">
+            <div className="flex items-center gap-1.5">
+              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" />
+              </svg>
+              <span className="font-mono truncate">{session.workDir}</span>
+            </div>
+            <span className="font-mono text-gray-400 ml-4" title={`Session ID: ${session.id}`}>
+              {session.id.slice(0, 8)}
+            </span>
           </div>
         </div>
       </header>
@@ -1120,6 +1125,14 @@ function ConversationTurnView({
   const containerRef = useRef<HTMLDivElement>(null);
   const [autoScroll, setAutoScroll] = useState(true);
   const [isExpanded, setIsExpanded] = useState(false);
+  const [isPromptExpanded, setIsPromptExpanded] = useState(false);
+
+  // Check if prompt has more than 10 lines
+  const promptLines = process.prompt.split('\n');
+  const isPromptLong = promptLines.length > 10;
+  const truncatedPrompt = isPromptLong && !isPromptExpanded
+    ? promptLines.slice(0, 10).join('\n')
+    : process.prompt;
 
   const displayLogs = isLive ? liveLogs : logs;
   const { logs: parsedLogs, finalResult } = parseLogs(displayLogs, showRaw);
@@ -1151,7 +1164,17 @@ function ConversationTurnView({
             <span className="text-xs text-gray-500">Turn {turnNumber}</span>
           </div>
           <div className="bg-blue-50 dark:bg-blue-900/20 rounded-lg p-3 border border-blue-200 dark:border-blue-800">
-            <p className="whitespace-pre-wrap">{process.prompt}</p>
+            <p className="whitespace-pre-wrap">{truncatedPrompt}</p>
+            {isPromptLong && (
+              <div className="flex justify-end mt-1">
+                <button
+                  onClick={() => setIsPromptExpanded(!isPromptExpanded)}
+                  className="text-xs text-blue-600 dark:text-blue-400 hover:underline cursor-pointer"
+                >
+                  {isPromptExpanded ? 'Show less' : 'Read more'}
+                </button>
+              </div>
+            )}
             {/* Image attachments */}
             {process.images && process.images.length > 0 && (
               <div className="flex flex-wrap gap-2 mt-3">
