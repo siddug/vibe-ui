@@ -6,6 +6,7 @@ import {
   createSession,
   type Connector,
   type ApprovalMode,
+  type AgentMode,
   type ImageData,
 } from '@/lib/api';
 import { WorkDirSelector } from '@/components/chat/WorkDirSelector';
@@ -37,6 +38,7 @@ export function SessionCreateForm({
   const [submitting, setSubmitting] = useState(false);
   const [submittingToTriage, setSubmittingToTriage] = useState(false);
   const [approvalMode, setApprovalMode] = useState<ApprovalMode>('auto');
+  const [agentMode, setAgentMode] = useState<AgentMode>('default');
   const [images, setImages] = useState<ImageData[]>([]);
 
   const fetchConnectors = useCallback(async () => {
@@ -80,6 +82,7 @@ export function SessionCreateForm({
         startImmediately,
         enableApprovals: true,
         approvalMode,
+        agentMode,
         images: images.length > 0 ? images : undefined,
       });
       onSessionCreated?.(session.id, startImmediately);
@@ -129,7 +132,7 @@ export function SessionCreateForm({
             <button
               type="button"
               onClick={() => setApprovalMode('manual')}
-              className={`flex-1 px-4 py-2 rounded-lg border-2 transition-colors ${
+              className={`flex-1 px-4 py-2 rounded-lg border-2 transition-colors cursor-pointer ${
                 approvalMode === 'manual'
                   ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300'
                   : 'border-gray-200 dark:border-gray-700 hover:border-gray-300 dark:hover:border-gray-600'
@@ -143,7 +146,7 @@ export function SessionCreateForm({
             <button
               type="button"
               onClick={() => setApprovalMode('auto')}
-              className={`flex-1 px-4 py-2 rounded-lg border-2 transition-colors ${
+              className={`flex-1 px-4 py-2 rounded-lg border-2 transition-colors cursor-pointer ${
                 approvalMode === 'auto'
                   ? 'border-green-500 bg-green-50 dark:bg-green-900/30 text-green-700 dark:text-green-300'
                   : 'border-gray-200 dark:border-gray-700 hover:border-gray-300 dark:hover:border-gray-600'
@@ -152,6 +155,41 @@ export function SessionCreateForm({
               <div className="font-medium">Auto Approve</div>
               <div className="text-xs text-gray-500 dark:text-gray-400">
                 Approve all automatically
+              </div>
+            </button>
+          </div>
+        </div>
+
+        {/* Agent Mode Selector */}
+        <div>
+          <label className="block text-sm font-medium mb-2">Agent Mode</label>
+          <div className="flex gap-2">
+            <button
+              type="button"
+              onClick={() => setAgentMode('default')}
+              className={`flex-1 px-4 py-2 rounded-lg border-2 transition-colors cursor-pointer ${
+                agentMode === 'default'
+                  ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300'
+                  : 'border-gray-200 dark:border-gray-700 hover:border-gray-300 dark:hover:border-gray-600'
+              }`}
+            >
+              <div className="font-medium">Default</div>
+              <div className="text-xs text-gray-500 dark:text-gray-400">
+                Full agent capabilities
+              </div>
+            </button>
+            <button
+              type="button"
+              onClick={() => setAgentMode('plan')}
+              className={`flex-1 px-4 py-2 rounded-lg border-2 transition-colors cursor-pointer ${
+                agentMode === 'plan'
+                  ? 'border-purple-500 bg-purple-50 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300'
+                  : 'border-gray-200 dark:border-gray-700 hover:border-gray-300 dark:hover:border-gray-600'
+              }`}
+            >
+              <div className="font-medium">Plan</div>
+              <div className="text-xs text-gray-500 dark:text-gray-400">
+                Read-only analysis mode
               </div>
             </button>
           </div>

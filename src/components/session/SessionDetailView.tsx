@@ -21,6 +21,7 @@ import {
 import { useLogStream, type LogMessage } from '@/hooks/useLogStream';
 import { useApprovalStream } from '@/hooks/useApprovalStream';
 import { usePaginatedSessions } from '@/hooks/usePaginatedSessions';
+import ReactMarkdown from 'react-markdown';
 import {
   Button,
   Card,
@@ -75,6 +76,9 @@ export function SessionDetailView({
 
   // Track which processes we've fetched logs for
   const fetchedProcessesRef = useRef<Set<string>>(new Set());
+
+  // Textarea auto-resize ref
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   // Get the latest running process for live streaming
   const runningProcess = session?.processes?.find((p) => p.status === 'running');
@@ -200,6 +204,21 @@ export function SessionDetailView({
     }
   }, [pendingApprovals.length]);
 
+  // Auto-resize textarea
+  useEffect(() => {
+    const textarea = textareaRef.current;
+    if (textarea) {
+      // Reset height to auto to get the correct scrollHeight
+      textarea.style.height = 'auto';
+      // Calculate line height (approximately 20px per line)
+      const lineHeight = 20;
+      const maxLines = 7;
+      const maxHeight = lineHeight * maxLines;
+      // Set height to scrollHeight but cap at maxLines
+      textarea.style.height = `${Math.min(textarea.scrollHeight, maxHeight)}px`;
+    }
+  }, [followUpPrompt]);
+
   const handleScroll = () => {
     if (messagesContainerRef.current) {
       const { scrollTop, scrollHeight, clientHeight } = messagesContainerRef.current;
@@ -316,7 +335,7 @@ export function SessionDetailView({
   }
 
   const isRunning = session.status === 'in_progress';
-  const canFollowUp = !isRunning && (session.status === 'completed' || session.status === 'failed') && session.agentSessionId;
+  const canFollowUp = !isRunning && (session.status === 'completed' || session.status === 'failed' || session.status === 'done') && session.agentSessionId;
 
   // Sort turns by creation time
   const sortedTurns = [...conversationTurns].sort(
@@ -335,12 +354,12 @@ export function SessionDetailView({
               
               {editingName ? (
                 <div className="flex items-center gap-2">
-                  <Input
+                  <input
                     type="text"
                     value={nameInput}
                     onChange={(e) => setNameInput(e.target.value)}
                     placeholder="Session name..."
-                    className="w-48"
+                    className="w-48 px-1 py-0.5 text-lg font-semibold bg-transparent border-none outline-none focus:ring-0"
                     autoFocus
                   />
                   <Button size="sm" onClick={handleSaveName}>Save</Button>
@@ -358,7 +377,7 @@ export function SessionDetailView({
                       setNameInput(session.sessionName || '');
                       setEditingName(true);
                     }}
-                    className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
+                    className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 cursor-pointer"
                     title="Edit session name"
                   >
                     <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -369,19 +388,31 @@ export function SessionDetailView({
               )}
             </div>
             <div className="flex items-center gap-2 shrink-0 grow-1 justify-end mr-2">
-              {/* Approval Mode Toggle */}
-              <button
-                onClick={handleToggleMode}
-                className={`px-3 py-1 rounded-full text-xs font-medium transition-colors ${session.approvalMode === 'auto'
-                    ? 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300 hover:bg-green-200 dark:hover:bg-green-900/50'
-                    : 'bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 hover:bg-blue-200 dark:hover:bg-blue-900/50'
-                  }`}
-                title={`Click to switch to ${session.approvalMode === 'auto' ? 'manual' : 'auto'} mode`}
-              >
-                {session.approvalMode === 'auto' ? 'AUTO APPROVE' : 'MANUAL'}
-              </button>
-              <ProviderBadge provider={session.connectorType} />
-              <StatusBadge status={session.status} />
+              {/* Agent Mode Badge (read-only, set at session creation) */}
+              {session.agentMode === 'plan' && (
+                <span
+                  className="px-3 py-1 rounded-full text-xs font-medium bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300"
+                  title="Plan mode: read-only analysis (set at session creation)"
+                >
+                  PLAN MODE
+                </span>
+              )}
+              {/* Session Status - Dropdown for completed/failed/done/archived, Badge otherwise */}
+              {(session.status === 'completed' || session.status === 'failed' || session.status === 'done' || session.status === 'archived') ? (
+                <Dropdown
+                  value={session.status}
+                  onChange={(newStatus) => handleToggleStatus(newStatus as SessionStatus)}
+                  options={[
+                    { value: 'completed', label: 'Agent Completed' },
+                    { value: 'failed', label: 'Agent Failed' },
+                    { value: 'done', label: 'Done' },
+                    { value: 'archived', label: 'Archived' }
+                  ]}
+                  size="sm"
+                />
+              ) : (
+                <StatusBadge status={session.status} />
+              )}
             </div>
             {showCloseButton && onClose && (
                 <button
@@ -394,32 +425,31 @@ export function SessionDetailView({
                 </button>
               )}
           </div>
-          {/* Working Directory */}
-          <div className="mt-1 flex items-center gap-1.5 text-xs text-gray-500">
-            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" />
-            </svg>
-            <span className="font-mono truncate">{session.workDir}</span>
+          {/* Working Directory and Session ID */}
+          <div className="mt-1 flex items-center justify-between text-xs text-gray-500">
+            <div className="flex items-center gap-1.5">
+              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" />
+              </svg>
+              <span className="font-mono truncate">{session.workDir}</span>
+            </div>
+            <span className="font-mono text-gray-400 ml-4" title={`Session ID: ${session.id}`}>
+              {session.id.slice(0, 8)}
+            </span>
           </div>
         </div>
       </header>
 
-      {/* Auto mode indicator - sticky banner */}
-      {session.approvalMode === 'auto' && (
-        <div className="flex-shrink-0 bg-green-50 dark:bg-green-900/30 border-b border-green-300 dark:border-green-700 sticky top-[60px] z-10">
+      {/* Plan mode indicator - sticky banner */}
+      {session.agentMode === 'plan' && (
+        <div className="flex-shrink-0 bg-purple-50 dark:bg-purple-900/30 border-b border-purple-300 dark:border-purple-700 sticky top-[60px] z-10">
           <div className={`${maxWidthClass} mx-auto px-4 py-2`}>
-            <div className="flex items-center justify-center gap-2 text-green-700 dark:text-green-300 text-sm">
+            <div className="flex items-center justify-center gap-2 text-purple-700 dark:text-purple-300 text-sm">
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01" />
               </svg>
-              <span className="font-medium">AUTO APPROVE MODE</span>
-              <span className="text-green-600 dark:text-green-400">- All tool calls are being auto-approved</span>
-              <button
-                onClick={handleToggleMode}
-                className="ml-2 px-2 py-0.5 text-xs rounded bg-green-200 dark:bg-green-800 hover:bg-green-300 dark:hover:bg-green-700 transition-colors"
-              >
-                Switch to Manual
-              </button>
+              <span className="font-medium">PLAN MODE</span>
+              <span className="text-purple-600 dark:text-purple-400">- Read-only analysis, no file modifications</span>
             </div>
           </div>
         </div>
@@ -434,12 +464,12 @@ export function SessionDetailView({
         <div className={`${maxWidthClass} mx-auto px-4 py-6 space-y-6`}>
           {/* Show raw toggle */}
           <div className="flex justify-end">
-            <label className="flex items-center gap-2 text-xs text-gray-500 cursor-pointer">
+            <label className="flex items-center gap-2 text-xs text-gray-500 cursor-pointer select-none">
               <input
                 type="checkbox"
                 checked={showRaw}
                 onChange={(e) => setShowRaw(e.target.checked)}
-                className="rounded border-gray-300 dark:border-gray-600"
+                className="rounded border-gray-300 dark:border-gray-600 cursor-pointer"
               />
               Show raw logs
             </label>
@@ -510,7 +540,7 @@ export function SessionDetailView({
                   <button
                     type="button"
                     onClick={() => setFollowUpImages(images => images.filter((_, i) => i !== index))}
-                    className="absolute -top-1.5 -right-1.5 w-5 h-5 bg-red-500 text-white rounded-full flex items-center justify-center text-xs opacity-0 group-hover:opacity-100 transition-opacity"
+                    className="absolute -top-1.5 -right-1.5 w-5 h-5 bg-red-500 text-white rounded-full flex items-center justify-center text-xs opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer"
                     title="Remove image"
                   >
                     &times;
@@ -521,6 +551,7 @@ export function SessionDetailView({
           )}
           <div className="relative">
             <textarea
+              ref={textareaRef}
               value={followUpPrompt}
               onChange={(e) => setFollowUpPrompt(e.target.value)}
               onKeyDown={handleKeyDown}
@@ -564,63 +595,73 @@ export function SessionDetailView({
                       ? "Cannot send follow-ups: no session ID captured"
                       : `Session ${session.status}`
               }
-              rows={2}
+              rows={1}
               disabled={isRunning || !canFollowUp || submitting}
-              className="w-full px-4 py-3 pr-44 text-sm rounded-xl border border-[var(--input-border)] bg-[var(--input-bg)] focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none disabled:opacity-50 disabled:cursor-not-allowed"
+              className="w-full px-4 py-3 text-sm rounded-xl border border-[var(--input-border)] bg-[var(--input-bg)] focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none disabled:opacity-50 disabled:cursor-not-allowed overflow-y-auto"
+              style={{ minHeight: '44px', maxHeight: '140px' }}
             />
-            {/* Hidden file input for image upload */}
-            <input
-              type="file"
-              accept="image/jpeg,image/png,image/gif,image/webp"
-              multiple
-              onChange={async (e) => {
-                const files = e.target.files;
-                if (!files) return;
-                const newImages: ImageData[] = [];
-                for (const file of Array.from(files)) {
-                  if (file.size <= 20 * 1024 * 1024 && file.type.startsWith('image/')) {
-                    const result = await new Promise<string | null>((resolve) => {
-                      const reader = new FileReader();
-                      reader.onload = () => resolve(reader.result as string);
-                      reader.onerror = () => resolve(null);
-                      reader.readAsDataURL(file);
-                    });
-                    if (result) {
-                      const base64Data = result.split(',')[1];
-                      if (base64Data) {
-                        newImages.push({
-                          data: base64Data,
-                          mediaType: file.type as ImageData['mediaType'],
-                        });
-                      }
+          </div>
+          {/* Hidden file input for image upload */}
+          <input
+            type="file"
+            accept="image/jpeg,image/png,image/gif,image/webp"
+            multiple
+            onChange={async (e) => {
+              const files = e.target.files;
+              if (!files) return;
+              const newImages: ImageData[] = [];
+              for (const file of Array.from(files)) {
+                if (file.size <= 20 * 1024 * 1024 && file.type.startsWith('image/')) {
+                  const result = await new Promise<string | null>((resolve) => {
+                    const reader = new FileReader();
+                    reader.onload = () => resolve(reader.result as string);
+                    reader.onerror = () => resolve(null);
+                    reader.readAsDataURL(file);
+                  });
+                  if (result) {
+                    const base64Data = result.split(',')[1];
+                    if (base64Data) {
+                      newImages.push({
+                        data: base64Data,
+                        mediaType: file.type as ImageData['mediaType'],
+                      });
                     }
                   }
                 }
-                if (newImages.length > 0) {
-                  setFollowUpImages(prev => [...prev, ...newImages]);
-                }
-                e.target.value = '';
-              }}
-              className="hidden"
-              id="image-upload-input"
-            />
-            <div className="absolute right-3 bottom-3 flex items-center gap-1">
-              {/* Session Status Dropdown - shows current stage and allows switching */}
-              {(session.status === 'completed' || session.status === 'failed') && (
-                <Dropdown
-                  value={session.status}
-                  onChange={(newStatus) => handleToggleStatus(newStatus as SessionStatus)}
-                  options={[
-                    { value: 'completed', label: 'Completed' },
-                    { value: 'failed', label: 'Failed' }
-                  ]}
-                  size="sm"
-                />
-              )}
+              }
+              if (newImages.length > 0) {
+                setFollowUpImages(prev => [...prev, ...newImages]);
+              }
+              e.target.value = '';
+            }}
+            className="hidden"
+            id="image-upload-input"
+          />
+          {/* Action Bar - below textarea */}
+          <div className="flex items-center justify-between mt-2">
+            <div className="flex items-center gap-2">
+              {/* Approval Mode Toggle */}
+              <button
+                onClick={handleToggleMode}
+                className={`px-3 py-1 rounded-full text-xs font-medium transition-colors cursor-pointer ${session.approvalMode === 'auto'
+                    ? 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300 hover:bg-green-200 dark:hover:bg-green-900/50'
+                    : 'bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 hover:bg-blue-200 dark:hover:bg-blue-900/50'
+                  }`}
+                title={session.approvalMode === 'auto'
+                  ? 'All tool calls are being auto-approved. Click to switch to manual mode.'
+                  : 'Click to switch to auto-approve mode'}
+              >
+                {session.approvalMode === 'auto' ? 'Auto approve' : 'Manual'}
+              </button>
               {/* Spinner when agent is working */}
               {isRunning && (
-                <Spinner className="w-4 h-4 text-blue-500 mr-1" />
+                <div className="flex items-center gap-1 text-blue-500 text-sm">
+                  <Spinner className="w-4 h-4" />
+                  <span>Working...</span>
+                </div>
               )}
+            </div>
+            <div className="flex items-center gap-1">
               {/* Image Upload Button */}
               <IconButton
                 onClick={() => document.getElementById('image-upload-input')?.click()}
@@ -975,10 +1016,15 @@ function parseLogContent(content: string): ParsedMessage[] {
   }
 }
 
+interface ParsedLogsResult {
+  logs: { raw: LogMessage | ProcessLog; parsed: ParsedMessage; logType: string }[];
+  finalResult: ParsedMessage | null;
+}
+
 function parseLogs(
   logs: (LogMessage | ProcessLog)[],
   showRaw: boolean
-): { raw: LogMessage | ProcessLog; parsed: ParsedMessage; logType: string }[] {
+): ParsedLogsResult {
   const parsed = logs
     .flatMap((log) => {
       const content = 'content' in log ? log.content : (log as LogMessage).content || '';
@@ -1029,7 +1075,32 @@ function parseLogs(
     }
   }
 
-  return deduped;
+  // Extract the final result and remove duplicates
+  // Keep only the most informative result (prefer ones with actual content over "Completed (stopReason)")
+  let finalResult: ParsedMessage | null = null;
+  const logsWithoutResult: typeof deduped = [];
+
+  for (const item of deduped) {
+    if (item.parsed.type === 'result') {
+      // Prefer results with actual content over generic "Completed" messages
+      if (!finalResult) {
+        finalResult = item.parsed;
+      } else if (
+        item.parsed.content &&
+        !item.parsed.content.startsWith('Completed (') &&
+        (finalResult.content.startsWith('Completed (') || !finalResult.content)
+      ) {
+        finalResult = item.parsed;
+      } else if (item.parsed.cost && !finalResult.cost) {
+        // Merge cost information if available
+        finalResult = Object.assign({}, finalResult, { cost: item.parsed.cost });
+      }
+    } else {
+      logsWithoutResult.push(item);
+    }
+  }
+
+  return { logs: logsWithoutResult, finalResult };
 }
 
 // Conversation Turn Component
@@ -1053,8 +1124,18 @@ function ConversationTurnView({
   const { process, logs, isLoading } = turn;
   const containerRef = useRef<HTMLDivElement>(null);
   const [autoScroll, setAutoScroll] = useState(true);
+  const [isExpanded, setIsExpanded] = useState(false);
+  const [isPromptExpanded, setIsPromptExpanded] = useState(false);
+
+  // Check if prompt has more than 10 lines
+  const promptLines = process.prompt.split('\n');
+  const isPromptLong = promptLines.length > 10;
+  const truncatedPrompt = isPromptLong && !isPromptExpanded
+    ? promptLines.slice(0, 10).join('\n')
+    : process.prompt;
 
   const displayLogs = isLive ? liveLogs : logs;
+  const { logs: parsedLogs, finalResult } = parseLogs(displayLogs, showRaw);
 
   useEffect(() => {
     if (isLive && autoScroll && containerRef.current) {
@@ -1070,6 +1151,8 @@ function ConversationTurnView({
     }
   };
 
+  const hasToolCalls = parsedLogs.some(log => log.parsed.type === 'tool_call' || log.parsed.type === 'tool_result');
+
   return (
     <div className="space-y-3">
       {/* User Message (Prompt) */}
@@ -1081,7 +1164,17 @@ function ConversationTurnView({
             <span className="text-xs text-gray-500">Turn {turnNumber}</span>
           </div>
           <div className="bg-blue-50 dark:bg-blue-900/20 rounded-lg p-3 border border-blue-200 dark:border-blue-800">
-            <p className="whitespace-pre-wrap">{process.prompt}</p>
+            <p className="whitespace-pre-wrap">{truncatedPrompt}</p>
+            {isPromptLong && (
+              <div className="flex justify-end mt-1">
+                <button
+                  onClick={() => setIsPromptExpanded(!isPromptExpanded)}
+                  className="text-xs text-blue-600 dark:text-blue-400 hover:underline cursor-pointer"
+                >
+                  {isPromptExpanded ? 'Show less' : 'Read more'}
+                </button>
+              </div>
+            )}
             {/* Image attachments */}
             {process.images && process.images.length > 0 && (
               <div className="flex flex-wrap gap-2 mt-3">
@@ -1114,35 +1207,125 @@ function ConversationTurnView({
               </span>
             )}
           </div>
-          <div className="bg-gray-50 dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 overflow-hidden">
-            {isLoading ? (
+
+          {/* Collapsible Tool Calls / Details Section */}
+          {hasToolCalls && (
+            <div className="bg-gray-50 dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 overflow-hidden mb-3">
+              <button
+                onClick={() => setIsExpanded(!isExpanded)}
+                className="w-full px-4 py-2 flex items-center justify-between text-sm text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700/50 transition-colors cursor-pointer"
+              >
+                <span className="flex items-center gap-2">
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4" />
+                  </svg>
+                  {parsedLogs.filter(l => l.parsed.type === 'tool_call').length} tool call(s)
+                </span>
+                <svg
+                  className={`w-4 h-4 transition-transform ${isExpanded ? 'rotate-180' : ''}`}
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                </svg>
+              </button>
+              {isExpanded && (
+                <>
+                  {isLoading ? (
+                    <div className="p-4 flex items-center justify-center border-t border-gray-200 dark:border-gray-700">
+                      <Spinner className="h-5 w-5 text-gray-400" />
+                    </div>
+                  ) : (
+                    <div
+                      ref={containerRef}
+                      onScroll={handleScroll}
+                      className="max-h-96 overflow-y-auto p-4 font-mono text-sm space-y-2 border-t border-gray-200 dark:border-gray-700"
+                    >
+                      {parsedLogs.map((log, index) => (
+                        <ParsedLogLine key={index} log={log} showRaw={showRaw} />
+                      ))}
+                    </div>
+                  )}
+                </>
+              )}
+              {process.exitCode !== null && (
+                <div className="border-t border-gray-200 dark:border-gray-700 px-4 py-2 text-xs text-gray-500 flex justify-between">
+                  <span>Exit code: {process.exitCode}</span>
+                  {process.completedAt && (
+                    <span>Completed: {new Date(process.completedAt).toLocaleString()}</span>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Non-tool logs (assistant text) when no tool calls */}
+          {!hasToolCalls && parsedLogs.length > 0 && (
+            <div className="bg-gray-50 dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 overflow-hidden mb-3">
+              {isLoading ? (
+                <div className="p-4 flex items-center justify-center">
+                  <Spinner className="h-5 w-5 text-gray-400" />
+                </div>
+              ) : (
+                <div
+                  ref={containerRef}
+                  onScroll={handleScroll}
+                  className="max-h-96 overflow-y-auto p-4 font-mono text-sm space-y-2"
+                >
+                  {parsedLogs.map((log, index) => (
+                    <ParsedLogLine key={index} log={log} showRaw={showRaw} />
+                  ))}
+                </div>
+              )}
+              {process.exitCode !== null && (
+                <div className="border-t border-gray-200 dark:border-gray-700 px-4 py-2 text-xs text-gray-500 flex justify-between">
+                  <span>Exit code: {process.exitCode}</span>
+                  {process.completedAt && (
+                    <span>Completed: {new Date(process.completedAt).toLocaleString()}</span>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Loading state when no logs yet */}
+          {isLoading && parsedLogs.length === 0 && (
+            <div className="bg-gray-50 dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 overflow-hidden mb-3">
               <div className="p-4 flex items-center justify-center">
                 <Spinner className="h-5 w-5 text-gray-400" />
               </div>
-            ) : displayLogs.length === 0 ? (
+            </div>
+          )}
+
+          {/* Waiting state */}
+          {!isLoading && parsedLogs.length === 0 && !finalResult && (
+            <div className="bg-gray-50 dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 overflow-hidden mb-3">
               <div className="p-4 text-gray-500 text-sm">
                 {isLive ? 'Waiting for response...' : 'No logs available'}
               </div>
-            ) : (
-              <div
-                ref={containerRef}
-                onScroll={handleScroll}
-                className="max-h-96 overflow-y-auto p-4 font-mono text-sm space-y-2"
-              >
-                {parseLogs(displayLogs, showRaw).map((log, index) => (
-                  <ParsedLogLine key={index} log={log} showRaw={showRaw} />
-                ))}
-              </div>
-            )}
-            {process.exitCode !== null && (
-              <div className="border-t border-gray-200 dark:border-gray-700 px-4 py-2 text-xs text-gray-500 flex justify-between">
-                <span>Exit code: {process.exitCode}</span>
-                {process.completedAt && (
-                  <span>Completed: {new Date(process.completedAt).toLocaleString()}</span>
+            </div>
+          )}
+
+          {/* Final Result - Displayed prominently outside the collapsed section */}
+          {finalResult && !isLive && (
+            <div className="bg-green-50 dark:bg-green-900/30 rounded-lg border border-green-200 dark:border-green-800 p-4">
+              <div className="flex items-center gap-2 mb-2">
+                <svg className="w-5 h-5 text-green-600 dark:text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+                <span className="text-green-700 dark:text-green-300 font-medium text-sm">Result</span>
+                {finalResult.cost && (
+                  <span className="text-green-600 dark:text-green-500 text-xs ml-auto">
+                    Cost: ${finalResult.cost.toFixed(4)}
+                  </span>
                 )}
               </div>
-            )}
-          </div>
+              <div className="text-green-800 dark:text-green-200 prose prose-sm prose-green dark:prose-invert max-w-none">
+                <ReactMarkdown>{ensureString(finalResult.content)}</ReactMarkdown>
+              </div>
+            </div>
+          )}
         </div>
       </div>
     </div>
@@ -1209,15 +1392,8 @@ function ParsedLogLine({
       );
 
     case 'result':
-      return (
-        <div className="border-l-2 border-green-500 pl-3 my-2 bg-green-50 dark:bg-green-900/20 p-2 rounded-r">
-          <div className="text-green-600 dark:text-green-400 text-xs mb-1">Result</div>
-          <div className="text-green-700 dark:text-green-200">{content}</div>
-          {parsed.cost && (
-            <div className="text-green-600 dark:text-green-500 text-xs mt-1">Cost: ${parsed.cost.toFixed(4)}</div>
-          )}
-        </div>
-      );
+      // Results are now displayed outside the log container, so skip rendering here
+      return null;
 
     case 'system':
       return (
