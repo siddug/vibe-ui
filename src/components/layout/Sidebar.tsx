@@ -8,6 +8,8 @@ import { useTheme } from '@/contexts/ThemeContext';
 import { useViewMode } from '@/contexts/ViewModeContext';
 import { getSessions, type Session } from '@/lib/api';
 import { Spinner } from '@/components/ui';
+import { ServerSwitcher } from './ServerSwitcher';
+import { useServer } from '@/contexts/ServerContext';
 
 export function Sidebar() {
   const router = useRouter();
@@ -15,6 +17,7 @@ export function Sidebar() {
   const { isCollapsed, toggle } = useSidebar();
   const { theme, toggleTheme } = useTheme();
   const { toggleViewMode } = useViewMode();
+  const { activeServer } = useServer();
   const [sessions, setSessions] = useState<Session[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -35,11 +38,14 @@ export function Sidebar() {
   }, []);
 
   useEffect(() => {
+    // Reset when server changes
+    setSessions([]);
+    setLoading(true);
     fetchSessions();
     // Poll for updates
     const interval = setInterval(fetchSessions, 5000);
     return () => clearInterval(interval);
-  }, [fetchSessions]);
+  }, [fetchSessions, activeServer?.id]);
 
   const handleNewChat = () => {
     router.push('/');
@@ -122,6 +128,11 @@ export function Sidebar() {
             </button>
           </div>
         </div>
+        {/* Server Switcher */}
+        <div className="mb-2">
+          <ServerSwitcher />
+        </div>
+
         {/* New Chat Button */}
         <button
           onClick={handleNewChat}

@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { getWebSocketUrl } from '@/lib/api';
+import { getWebSocketUrl, getWebSocketProtocols } from '@/lib/api';
 
 export interface LogMessage {
   type: 'stdout' | 'stderr' | 'jsonPatch' | 'sessionId' | 'ready' | 'finished';
@@ -50,7 +50,8 @@ export function useLogStream(processId: string | null): UseLogStreamResult {
     }
 
     const url = getWebSocketUrl(`/api/processes/${currentProcessId}/stream`);
-    const ws = new WebSocket(url);
+    const protocols = getWebSocketProtocols();
+    const ws = protocols.length > 0 ? new WebSocket(url, protocols) : new WebSocket(url);
 
     ws.onopen = () => {
       setIsConnected(true);

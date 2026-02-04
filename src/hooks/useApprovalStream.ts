@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { getWebSocketUrl, type ApprovalRequest, type ApprovalResponse } from '@/lib/api';
+import { getWebSocketUrl, getWebSocketProtocols, type ApprovalRequest, type ApprovalResponse } from '@/lib/api';
 
 export interface ApprovalMessage {
   type: 'approvalRequest' | 'approvalResponse' | 'sessionEnded' | 'error';
@@ -56,7 +56,8 @@ export function useApprovalStream(sessionId: string | null): UseApprovalStreamRe
     }
 
     const url = getWebSocketUrl(`/api/sessions/${currentSessionId}/approvals/stream`);
-    const ws = new WebSocket(url);
+    const protocols = getWebSocketProtocols();
+    const ws = protocols.length > 0 ? new WebSocket(url, protocols) : new WebSocket(url);
 
     ws.onopen = () => {
       setIsConnected(true);

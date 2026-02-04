@@ -2,6 +2,8 @@
  * vibe-server API client
  */
 
+import type { ServerConfig } from './servers';
+
 // Extend Window interface for Electron
 declare global {
   interface Window {
@@ -13,10 +15,34 @@ declare global {
   }
 }
 
-// Check if running in Electron environment
-const API_BASE = typeof window !== 'undefined' && window.electronAPI
+// Default fallback URL
+const DEFAULT_API_BASE = typeof window !== 'undefined' && window.electronAPI
   ? 'http://localhost:7778'
   : (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:7778');
+
+// Active server config (set by ServerContext)
+let _activeServer: ServerConfig | null = null;
+
+/**
+ * Set the active server config. Called by ServerContext on server switch.
+ */
+export function setActiveServerConfig(config: ServerConfig | null): void {
+  _activeServer = config;
+}
+
+/**
+ * Get the current API base URL
+ */
+function getApiBase(): string {
+  return _activeServer?.url || DEFAULT_API_BASE;
+}
+
+/**
+ * Get the current auth key
+ */
+function getAuthKey(): string | null {
+  return _activeServer?.authKey || null;
+}
 
 // Types
 // Approval mode type
@@ -202,7 +228,7 @@ async function fetchApi<T>(
   endpoint: string,
   options?: RequestInit
 ): Promise<T> {
-  const url = `${API_BASE}${endpoint}`;
+  const url = `${getApiBase()}${endpoint}`;
 
   // Only set Content-Type for requests with a body
   const headers: Record<string, string> = {
@@ -212,10 +238,40 @@ async function fetchApi<T>(
     headers['Content-Type'] = 'application/json';
   }
 
+  // Add auth header if we have a key
+  const authKey = getAuthKey();
+  if (authKey) {
+    headers['Authorization'] = `Bearer ${authKey}`;
+  }
+
   const response = await fetch(url, {
     ...options,
     headers,
   });
+
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({ message: response.statusText }));
+    throw new Error(error.message || `API error: ${response.status}`);
+  }
+
+  return response.json();
+}
+
+/**
+ * Fetch from a specific server (used for validation before adding)
+ */
+export async function fetchFromServer<T>(
+  serverUrl: string,
+  authKey: string,
+  endpoint: string
+): Promise<T> {
+  const url = `${serverUrl}${endpoint}`;
+  const headers: Record<string, string> = {};
+  if (authKey) {
+    headers['Authorization'] = `Bearer ${authKey}`;
+  }
+
+  const response = await fetch(url, { headers });
 
   if (!response.ok) {
     const error = await response.json().catch(() => ({ message: response.statusText }));
@@ -352,10 +408,22 @@ export async function respondToApproval(
   });
 }
 
-// WebSocket URL helper
+// WebSocket URL helper (returns URL without auth — use getWebSocketProtocols for auth)
 export function getWebSocketUrl(endpoint: string): string {
-  const wsBase = API_BASE.replace(/^http/, 'ws');
+  const wsBase = getApiBase().replace(/^http/, 'ws');
   return `${wsBase}${endpoint}`;
+}
+
+/**
+ * Get WebSocket subprotocols for authentication.
+ * The auth key is sent as a subprotocol "vibe-auth.<key>" to avoid exposing it in URLs.
+ */
+export function getWebSocketProtocols(): string[] {
+  const authKey = getAuthKey();
+  if (authKey) {
+    return [`vibe-auth.${authKey}`];
+  }
+  return [];
 }
 
 // API Keys

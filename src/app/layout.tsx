@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import "./globals.css";
+import { ServerProvider } from "@/contexts/ServerContext";
 import { ThemeProvider } from "@/contexts/ThemeContext";
 import { SidebarProvider } from "@/contexts/SidebarContext";
 import { ViewModeProvider } from "@/contexts/ViewModeContext";
@@ -18,13 +19,15 @@ export default function RootLayout({
   return (
     <html lang="en" suppressHydrationWarning>
       <body className="antialiased">
-        <ThemeProvider>
-          <ViewModeProvider>
-            <SidebarProvider>
-              <AppShell>{children}</AppShell>
-            </SidebarProvider>
-          </ViewModeProvider>
-        </ThemeProvider>
+        <ServerProvider>
+          <ThemeProvider>
+            <ViewModeProvider>
+              <SidebarProvider>
+                <AppShell>{children}</AppShell>
+              </SidebarProvider>
+            </ViewModeProvider>
+          </ThemeProvider>
+        </ServerProvider>
       </body>
     </html>
   );

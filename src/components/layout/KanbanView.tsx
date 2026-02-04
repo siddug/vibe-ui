@@ -13,6 +13,7 @@ import { usePaginatedSessions } from '@/hooks/usePaginatedSessions';
 import { Spinner } from '@/components/ui';
 import { SessionCreateModal } from '@/components/session/SessionCreateModal';
 import { SessionDetailModal } from '@/components/session/SessionDetailModal';
+import { ServerSwitcher } from '@/components/layout/ServerSwitcher';
 
 const COLUMNS: { status: SessionStatus; title: string; color: string; bgColor: string }[] = [
   { status: 'triage', title: 'Todo', color: 'bg-gray-400', bgColor: 'bg-gray-50 dark:bg-gray-800/50' },
@@ -131,6 +132,8 @@ export function KanbanView() {
             <h1 className="text-xl font-semibold">VibeX</h1>
           </div>
           <div className="flex items-center gap-2">
+            {/* Server Switcher */}
+            <ServerSwitcher />
             {/* Theme Toggle */}
             <button
               onClick={toggleTheme}

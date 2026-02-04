@@ -46,8 +46,21 @@ export function AppShell({ children }: AppShellProps) {
       )}
 
       {/* Main Content */}
+      {/* On mobile, hide content when sidebar is expanded (too little real estate) */}
       <main className="flex-1 overflow-hidden flex flex-col min-w-0">
-        {children}
+        {!isCollapsed && (
+          <div className="md:hidden flex-1 flex items-center justify-center bg-[var(--bg-primary)] p-6">
+            <div className="text-center text-gray-400">
+              <svg className="w-10 h-10 mx-auto mb-3 opacity-50" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M11 19l-7-7 7-7m8 14l-7-7 7-7" />
+              </svg>
+              <p className="text-sm">Collapse the sidebar to view session details</p>
+            </div>
+          </div>
+        )}
+        <div className={`flex-1 overflow-hidden flex flex-col min-w-0 ${!isCollapsed ? 'hidden md:flex' : ''}`}>
+          {children}
+        </div>
       </main>
     </div>
   );
