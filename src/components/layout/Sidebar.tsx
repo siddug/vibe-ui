@@ -77,7 +77,10 @@ export function Sidebar() {
       {/* Header */}
       <div className="flex-shrink-0 p-3 border-b border-[var(--sidebar-border)]">
         <div className="flex items-center justify-between mb-3">
-          <span className="font-semibold text-lg">VibeX</span>
+          <div className="flex items-center gap-2">
+            <img src="/logo-32.png" alt="VibeX" className="w-6 h-6" />
+            <span className="font-semibold text-lg">VibeX</span>
+          </div>
           <div className="flex items-center gap-1">
             {/* Kanban View Toggle */}
             <button

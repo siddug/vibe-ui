@@ -34,6 +34,9 @@ import {
   Dropdown,
   IconButton,
 } from '@/components/ui';
+import { FileExplorer } from '@/components/chat/FileExplorer';
+
+type SessionTab = 'agent' | 'files';
 
 interface ConversationTurn {
   process: ExecutionProcess;
@@ -64,6 +67,7 @@ export function SessionDetailView({
   const [submitting, setSubmitting] = useState(false);
   const [conversationTurns, setConversationTurns] = useState<ConversationTurn[]>([]);
   const [showRaw, setShowRaw] = useState(false);
+  const [activeTab, setActiveTab] = useState<SessionTab>('agent');
 
   // Session name editing
   const [editingName, setEditingName] = useState(false);
@@ -342,7 +346,7 @@ export function SessionDetailView({
     (a, b) => new Date(a.process.createdAt).getTime() - new Date(b.process.createdAt).getTime()
   );
 
-  const maxWidthClass = compact ? 'max-w-full' : 'max-w-5xl';
+  const maxWidthClass = 'max-w-full';
 
   return (
     <div className="flex-1 flex flex-col h-full overflow-hidden">
@@ -455,77 +459,111 @@ export function SessionDetailView({
         </div>
       )}
 
-      {/* Messages Area (Scrollable) */}
-      <div
-        ref={messagesContainerRef}
-        onScroll={handleScroll}
-        className="flex-1 overflow-y-auto"
-      >
-        <div className={`${maxWidthClass} mx-auto px-4 py-6 space-y-6`}>
-          {/* Show raw toggle */}
-          <div className="flex justify-end">
-            <label className="flex items-center gap-2 text-xs text-gray-500 cursor-pointer select-none">
-              <input
-                type="checkbox"
-                checked={showRaw}
-                onChange={(e) => setShowRaw(e.target.checked)}
-                className="rounded border-gray-300 dark:border-gray-600 cursor-pointer"
-              />
-              Show raw logs
-            </label>
+      {/* Tab Bar */}
+      <div className="flex-shrink-0 border-b border-[var(--card-border)] bg-[var(--card-bg)]">
+        <div className={`${maxWidthClass} mx-auto px-4`}>
+          <div className="flex gap-0">
+            {(['agent', 'files'] as const).map((tab) => (
+              <button
+                key={tab}
+                onClick={() => setActiveTab(tab)}
+                className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors cursor-pointer ${
+                  activeTab === tab
+                    ? 'border-blue-500 text-blue-600 dark:text-blue-400'
+                    : 'border-transparent text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 hover:border-gray-300'
+                }`}
+              >
+                {tab === 'agent' ? 'Agent' : 'Files'}
+              </button>
+            ))}
           </div>
-
-          {sortedTurns.length === 0 && (
-            <div className="text-center text-gray-500 py-12">
-              <p>No messages yet</p>
-            </div>
-          )}
-
-          {sortedTurns.map((turn, index) => {
-            const isCurrentProcess = turn.process.id === runningProcess?.id;
-            const logsMatchProcess = connectedProcessId === turn.process.id;
-            const shouldShowLiveLogs = isCurrentProcess && logsMatchProcess;
-
-            return (
-              <ConversationTurnView
-                key={turn.process.id}
-                turn={turn}
-                turnNumber={index + 1}
-                liveLogs={shouldShowLiveLogs ? liveLogs : []}
-                isLive={isCurrentProcess}
-                isConnected={isConnected && logsMatchProcess}
-                showRaw={showRaw}
-                connectorType={session.connectorType}
-              />
-            );
-          })}
-
-          {/* Inline Approval Requests - only show in manual mode */}
-          {pendingApprovals.length > 0 && session.approvalMode === 'manual' && (
-            <div id="inline-approvals" className="space-y-3 p-4 rounded-xl border-2 border-cyan-500 bg-cyan-50 dark:bg-cyan-900/20 animate-pulse-slow">
-              <div className="flex items-center gap-2">
-                <span className="text-cyan-600 dark:text-cyan-400 font-medium">
-                  Action Required: {pendingApprovals.length} Pending Approval{pendingApprovals.length > 1 ? 's' : ''}
-                </span>
-              </div>
-              {pendingApprovals.map((approval) => (
-                <InlineApprovalCard
-                  key={approval.requestId}
-                  approval={approval}
-                  onApprove={() => respondToApproval(approval.requestId, 'approved')}
-                  onDeny={() => respondToApproval(approval.requestId, 'denied', 'User denied')}
-                />
-              ))}
-            </div>
-          )}
-
-          {/* Scroll anchor */}
-          <div ref={messagesEndRef} />
         </div>
       </div>
 
-      {/* Sticky Input Area */}
-      <div className="flex-shrink-0 border-t border-[var(--card-border)] bg-[var(--card-bg)] sticky bottom-0">
+      {/* Tab Content */}
+      {activeTab === 'agent' ? (
+        <>
+          {/* Messages Area (Scrollable) */}
+          <div
+            ref={messagesContainerRef}
+            onScroll={handleScroll}
+            className="flex-1 overflow-y-auto"
+          >
+            <div className={`${maxWidthClass} mx-auto px-4 py-6 space-y-6`}>
+              {/* Show raw toggle */}
+              <div className="flex justify-end">
+                <label className="flex items-center gap-2 text-xs text-gray-500 cursor-pointer select-none">
+                  <input
+                    type="checkbox"
+                    checked={showRaw}
+                    onChange={(e) => setShowRaw(e.target.checked)}
+                    className="rounded border-gray-300 dark:border-gray-600 cursor-pointer"
+                  />
+                  Show raw logs
+                </label>
+              </div>
+
+              {sortedTurns.length === 0 && (
+                <div className="text-center text-gray-500 py-12">
+                  <p>No messages yet</p>
+                </div>
+              )}
+
+              {sortedTurns.map((turn, index) => {
+                const isCurrentProcess = turn.process.id === runningProcess?.id;
+                const logsMatchProcess = connectedProcessId === turn.process.id;
+                const shouldShowLiveLogs = isCurrentProcess && logsMatchProcess;
+
+                return (
+                  <ConversationTurnView
+                    key={turn.process.id}
+                    turn={turn}
+                    turnNumber={index + 1}
+                    liveLogs={shouldShowLiveLogs ? liveLogs : []}
+                    isLive={isCurrentProcess}
+                    isConnected={isConnected && logsMatchProcess}
+                    showRaw={showRaw}
+                    connectorType={session.connectorType}
+                  />
+                );
+              })}
+
+              {/* Inline Approval Requests - only show in manual mode */}
+              {pendingApprovals.length > 0 && session.approvalMode === 'manual' && (
+                <div id="inline-approvals" className="space-y-3 p-4 rounded-xl border-2 border-cyan-500 bg-cyan-50 dark:bg-cyan-900/20 animate-pulse-slow">
+                  <div className="flex items-center gap-2">
+                    <span className="text-cyan-600 dark:text-cyan-400 font-medium">
+                      Action Required: {pendingApprovals.length} Pending Approval{pendingApprovals.length > 1 ? 's' : ''}
+                    </span>
+                  </div>
+                  {pendingApprovals.map((approval) => (
+                    <InlineApprovalCard
+                      key={approval.requestId}
+                      approval={approval}
+                      onApprove={() => respondToApproval(approval.requestId, 'approved')}
+                      onDeny={() => respondToApproval(approval.requestId, 'denied', 'User denied')}
+                    />
+                  ))}
+                </div>
+              )}
+
+              {/* Scroll anchor */}
+              <div ref={messagesEndRef} />
+            </div>
+          </div>
+        </>
+      ) : (
+        /* Files Tab */
+        <div className="flex-1 overflow-hidden">
+          <FileExplorer
+            initialPath={session.workDir}
+            mode="browse"
+          />
+        </div>
+      )}
+
+      {/* Sticky Input Area - only show on Agent tab */}
+      {activeTab === 'agent' && <div className="flex-shrink-0 border-t border-[var(--card-border)] bg-[var(--card-bg)] sticky bottom-0">
         <div className={`${maxWidthClass} mx-auto px-4 py-4`}>
           {/* Image Previews */}
           {followUpImages.length > 0 && (
@@ -712,7 +750,7 @@ export function SessionDetailView({
             </div>
           </div>
         </div>
-      </div>
+      </div>}
     </div>
   );
 }

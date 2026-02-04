@@ -9,6 +9,15 @@ import { AppShell } from "@/components/layout/AppShell";
 export const metadata: Metadata = {
   title: "VibeX",
   description: "AI Agent Session Manager",
+  icons: {
+    icon: [
+      { url: "/logo-32.png", sizes: "32x32", type: "image/png" },
+      { url: "/logo-64.png", sizes: "64x64", type: "image/png" },
+    ],
+    apple: [
+      { url: "/apple-icon.png", sizes: "1024x1024", type: "image/png" },
+    ],
+  },
 };
 
 export default function RootLayout({

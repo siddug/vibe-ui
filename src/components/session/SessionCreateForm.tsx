@@ -4,15 +4,19 @@ import { useState, useEffect, useCallback } from 'react';
 import {
   getConnectors,
   createSession,
+  fetchFromServer,
   type Connector,
   type ApprovalMode,
   type AgentMode,
   type ImageData,
+  type HealthResponse,
 } from '@/lib/api';
 import { WorkDirSelector } from '@/components/chat/WorkDirSelector';
 import { ConnectorSelector } from '@/components/chat/ConnectorSelector';
 import { ChatInput } from '@/components/chat/ChatInput';
-import { Button, Spinner } from '@/components/ui';
+import { Button, Input, Spinner } from '@/components/ui';
+import { useServer } from '@/contexts/ServerContext';
+import { parseConfigString } from '@/lib/servers';
 
 interface SessionCreateFormProps {
   onSessionCreated?: (sessionId: string, startedImmediately: boolean) => void;
@@ -27,9 +31,16 @@ export function SessionCreateForm({
   showCancelButton = false,
   showSaveToTriageButton = false,
 }: SessionCreateFormProps) {
+  const { servers, addServer, switchServer } = useServer();
   const [connectors, setConnectors] = useState<Connector[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+
+  // Add server form state
+  const [configString, setConfigString] = useState('');
+  const [serverError, setServerError] = useState<string | null>(null);
+  const [validating, setValidating] = useState(false);
+  const [validated, setValidated] = useState<{ name: string; url: string } | null>(null);
 
   // Form state
   const [workDir, setWorkDir] = useState('~/Documents');
@@ -40,6 +51,40 @@ export function SessionCreateForm({
   const [approvalMode, setApprovalMode] = useState<ApprovalMode>('auto');
   const [agentMode, setAgentMode] = useState<AgentMode>('default');
   const [images, setImages] = useState<ImageData[]>([]);
+
+  const handleValidateServer = async () => {
+    setServerError(null);
+    setValidated(null);
+
+    if (!configString.trim()) {
+      setServerError('Please paste a config string');
+      return;
+    }
+
+    try {
+      const parsed = parseConfigString(configString.trim());
+      setValidating(true);
+      await fetchFromServer<HealthResponse>(parsed.url, parsed.authKey, '/api/health');
+      setValidated({ name: parsed.name, url: parsed.url });
+    } catch (e) {
+      setServerError(e instanceof Error ? e.message : 'Failed to validate server');
+    } finally {
+      setValidating(false);
+    }
+  };
+
+  const handleAddServer = () => {
+    try {
+      const parsed = parseConfigString(configString.trim());
+      const config = addServer(parsed);
+      switchServer(config.id);
+      setConfigString('');
+      setServerError(null);
+      setValidated(null);
+    } catch (e) {
+      setServerError(e instanceof Error ? e.message : 'Failed to add server');
+    }
+  };
 
   const fetchConnectors = useCallback(async () => {
     try {
@@ -59,8 +104,12 @@ export function SessionCreateForm({
   }, [connector]);
 
   useEffect(() => {
-    fetchConnectors();
-  }, [fetchConnectors]);
+    if (servers.length > 0) {
+      fetchConnectors();
+    } else {
+      setLoading(false);
+    }
+  }, [fetchConnectors, servers.length]);
 
   const handleSubmit = async (startImmediately: boolean = true) => {
     if (!connector || !workDir || (!prompt.trim() && images.length === 0)) {
@@ -85,6 +134,9 @@ export function SessionCreateForm({
         agentMode,
         images: images.length > 0 ? images : undefined,
       });
+      // Reset form state before calling callback to ensure clean dismissal
+      setSubmitting(false);
+      setSubmittingToTriage(false);
       onSessionCreated?.(session.id, startImmediately);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to create session');
@@ -97,6 +149,85 @@ export function SessionCreateForm({
     return (
       <div className="flex-1 flex items-center justify-center py-8">
         <Spinner className="h-8 w-8 text-blue-600" />
+      </div>
+    );
+  }
+
+  // No servers configured — show add server form instead of session form
+  if (servers.length === 0) {
+    return (
+      <div className="space-y-6 p-4">
+        <div className="text-center space-y-2">
+          <h2 className="text-xl font-semibold">No Server Connected</h2>
+          <p className="text-sm text-gray-500 dark:text-gray-400">
+            Add a vibe-server to get started with creating sessions.
+          </p>
+        </div>
+
+        <div className="border border-gray-200 dark:border-gray-700 rounded-lg p-4 space-y-4">
+          <div>
+            <label className="block text-sm font-medium mb-1">Connection Config</label>
+            <p className="text-xs text-gray-500 dark:text-gray-400 mb-2">
+              Paste the connection config string from your vibe-server terminal output.
+            </p>
+            <Input
+              value={configString}
+              onChange={(e) => {
+                setConfigString(e.target.value);
+                setValidated(null);
+                setServerError(null);
+              }}
+              placeholder="vibe://eyJuYW1lIjoi..."
+              className="font-mono text-sm"
+            />
+          </div>
+
+          {serverError && (
+            <div className="text-sm text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-900/20 px-3 py-2 rounded">
+              {serverError}
+            </div>
+          )}
+
+          {validated && (
+            <div className="text-sm bg-green-50 dark:bg-green-900/20 px-3 py-2 rounded border border-green-200 dark:border-green-800">
+              <div className="font-medium text-green-700 dark:text-green-300">Server reachable</div>
+              <div className="text-green-600 dark:text-green-400 mt-1">
+                <span className="font-medium">{validated.name}</span>
+                <span className="text-gray-500 ml-2">{validated.url}</span>
+              </div>
+            </div>
+          )}
+
+          <div className="flex justify-end gap-2">
+            {!validated ? (
+              <Button onClick={handleValidateServer} disabled={validating || !configString.trim()}>
+                {validating ? 'Validating...' : 'Validate'}
+              </Button>
+            ) : (
+              <Button onClick={handleAddServer}>
+                Add & Connect
+              </Button>
+            )}
+          </div>
+        </div>
+
+        <div className="bg-gray-50 dark:bg-gray-800/50 border border-gray-200 dark:border-gray-700 rounded-lg p-4 space-y-3">
+          <h3 className="text-sm font-medium">How to get the connection config</h3>
+          <ol className="text-xs text-gray-500 dark:text-gray-400 space-y-2 list-decimal list-inside">
+            <li>
+              Clone and set up the <code className="px-1 py-0.5 bg-gray-200 dark:bg-gray-700 rounded text-gray-700 dark:text-gray-300">vibe-server</code> repository
+            </li>
+            <li>
+              Install dependencies with <code className="px-1 py-0.5 bg-gray-200 dark:bg-gray-700 rounded text-gray-700 dark:text-gray-300">npm install</code>
+            </li>
+            <li>
+              Start the server with <code className="px-1 py-0.5 bg-gray-200 dark:bg-gray-700 rounded text-gray-700 dark:text-gray-300">npm run dev</code>
+            </li>
+            <li>
+              Copy the <code className="px-1 py-0.5 bg-gray-200 dark:bg-gray-700 rounded text-gray-700 dark:text-gray-300">vibe://...</code> connection string printed in the terminal
+            </li>
+          </ol>
+        </div>
       </div>
     );
   }

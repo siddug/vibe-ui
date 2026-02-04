@@ -22,8 +22,10 @@ export function SessionCreateModal({ open, onClose, onCreated }: SessionCreateMo
         showSaveToTriageButton
         onCancel={onClose}
         onSessionCreated={(sessionId, started) => {
-          onCreated();
+          // Close the modal first to ensure immediate UI feedback
           onClose();
+          // Then refresh the board (async, non-blocking)
+          onCreated();
           // In kanban mode, stay on the board - the session will appear in the columns
           // In sidebar mode, navigate to the session if it was started
           if (started && viewMode === 'sidebar') {

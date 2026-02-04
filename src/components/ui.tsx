@@ -318,7 +318,7 @@ export function Dropdown({ value, onChange, options, className = '', disabled = 
     <Listbox value={value} onChange={onChange} disabled={disabled}>
       <div className={`relative ${className}`}>
         <ListboxButton
-          className={`relative w-full border border-[var(--input-border)] bg-[var(--input-bg)] ${styles.button} text-left focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors ${disabled ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
+          className={`relative w-full border h-full border-[var(--input-border)] bg-[var(--input-bg)] ${styles.button} text-left focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors ${disabled ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
         >
           <span className="flex items-center gap-2 truncate">
             {selectedOption?.icon}

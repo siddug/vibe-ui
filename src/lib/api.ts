@@ -450,6 +450,27 @@ export async function saveApiKey(
   });
 }
 
+// Filesystem browsing
+export interface FileEntry {
+  name: string;
+  type: 'file' | 'directory';
+  path: string;
+}
+
+export interface ListDirectoryResponse {
+  path: string;
+  entries: FileEntry[];
+}
+
+export async function listDirectory(
+  path: string,
+  showHidden?: boolean
+): Promise<ListDirectoryResponse> {
+  const params = new URLSearchParams({ path });
+  if (showHidden) params.set('showHidden', 'true');
+  return fetchApi(`/api/filesystem/list?${params.toString()}`);
+}
+
 export async function deleteApiKey(
   provider: string
 ): Promise<{ status: string; provider: string }> {
