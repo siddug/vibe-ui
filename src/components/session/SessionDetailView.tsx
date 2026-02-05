@@ -393,15 +393,7 @@ export function SessionDetailView({
               )}
             </div>
             <div className="flex items-center gap-2 shrink-0 grow-1 justify-end mr-2">
-              {/* Agent Mode Badge (read-only, set at session creation) */}
-              {session.agentMode === 'plan' && (
-                <span
-                  className="px-3 py-1 rounded-full text-xs font-medium bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300"
-                  title="Plan mode: read-only analysis (set at session creation)"
-                >
-                  PLAN MODE
-                </span>
-              )}
+
               {/* Session Status - Dropdown for completed/failed/done/archived, Badge otherwise */}
               {(session.status === 'completed' || session.status === 'failed' || session.status === 'done' || session.status === 'archived') ? (
                 <Dropdown
@@ -445,20 +437,7 @@ export function SessionDetailView({
         </div>
       </header>
 
-      {/* Plan mode indicator - sticky banner */}
-      {session.agentMode === 'plan' && (
-        <div className="flex-shrink-0 bg-purple-50 dark:bg-purple-900/30 border-b border-purple-300 dark:border-purple-700 sticky top-[60px] z-10">
-          <div className={`${maxWidthClass} mx-auto px-4 py-2`}>
-            <div className="flex items-center justify-center gap-2 text-purple-700 dark:text-purple-300 text-sm">
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01" />
-              </svg>
-              <span className="font-medium">PLAN MODE</span>
-              <span className="text-purple-600 dark:text-purple-400">- Read-only analysis, no file modifications</span>
-            </div>
-          </div>
-        </div>
-      )}
+
 
       {/* Tab Bar */}
       <div className="flex-shrink-0 border-b border-[var(--card-border)] bg-[var(--card-bg)]">
