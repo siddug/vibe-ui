@@ -1003,6 +1003,68 @@ function parseLogContent(content: string): ParsedMessage[] {
       }];
     }
 
+    // Vibe streaming format (vibe -p --output streaming)
+    // Format: {"role": "assistant|user|tool|system", "content": "...", "tool_calls": [...]}
+    if (data.role) {
+      switch (data.role) {
+        case 'system':
+          // Skip system prompt lines
+          return [{ type: 'raw', content: '' }];
+
+        case 'user':
+          return [{ type: 'user', content: ensureString(data.content) }];
+
+        case 'assistant': {
+          const messages: ParsedMessage[] = [];
+
+          // Handle tool calls
+          if (data.tool_calls && Array.isArray(data.tool_calls)) {
+            for (const tc of data.tool_calls) {
+              let toolContent = '';
+              try {
+                const args = typeof tc.function?.arguments === 'string'
+                  ? JSON.parse(tc.function.arguments)
+                  : tc.function?.arguments || {};
+                const parts: string[] = [];
+                if (args.command) parts.push(`command: "${args.command}"`);
+                if (args.pattern) parts.push(`pattern: "${args.pattern}"`);
+                if (args.path) parts.push(`path: "${args.path}"`);
+                if (args.file_path) parts.push(`file: "${args.file_path}"`);
+                if (args.content) parts.push(`content: "${String(args.content).slice(0, 100)}${String(args.content).length > 100 ? '...' : ''}"`);
+                toolContent = parts.length > 0 ? parts.join(', ') : JSON.stringify(args, null, 2);
+              } catch {
+                toolContent = tc.function?.arguments || '';
+              }
+              messages.push({
+                type: 'tool_call',
+                content: toolContent,
+                toolName: tc.function?.name || 'tool',
+                toolId: tc.id,
+              });
+            }
+          }
+
+          // Handle text content
+          if (data.content && typeof data.content === 'string' && data.content.trim()) {
+            messages.push({ type: 'assistant', content: ensureString(data.content) });
+          }
+
+          return messages.length > 0 ? messages : [{ type: 'raw', content: '' }];
+        }
+
+        case 'tool':
+          return [{
+            type: 'tool_result',
+            content: ensureString(data.content) || 'Completed',
+            toolId: data.tool_call_id,
+            isError: false,
+          }];
+
+        default:
+          return [{ type: 'raw', content: '' }];
+      }
+    }
+
     // Claude Code format
     if (data.type === 'assistant' && data.message?.content) {
       const messages: ParsedMessage[] = [];
