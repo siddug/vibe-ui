@@ -9,17 +9,19 @@ interface SessionCreateModalProps {
   open: boolean;
   onClose: () => void;
   onCreated: () => void;
+  onScheduledTaskCreated?: () => void;
 }
 
-export function SessionCreateModal({ open, onClose, onCreated }: SessionCreateModalProps) {
+export function SessionCreateModal({ open, onClose, onCreated, onScheduledTaskCreated }: SessionCreateModalProps) {
   const router = useRouter();
   const { viewMode } = useViewMode();
 
   return (
-    <Dialog open={open} onClose={onClose} title="New Session" className="max-w-2xl">
+    <Dialog open={open} onClose={onClose} title="New Session" className="max-w-4xl w-full" fullHeight>
       <SessionCreateForm
         showCancelButton
         showSaveToTriageButton
+        showScheduleButton
         onCancel={onClose}
         onSessionCreated={(sessionId, started) => {
           // Close the modal first to ensure immediate UI feedback
@@ -31,6 +33,10 @@ export function SessionCreateModal({ open, onClose, onCreated }: SessionCreateMo
           if (started && viewMode === 'sidebar') {
             router.push(`/session/${sessionId}`);
           }
+        }}
+        onScheduledTaskCreated={() => {
+          onClose();
+          onScheduledTaskCreated?.();
         }}
       />
     </Dialog>

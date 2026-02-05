@@ -1,10 +1,9 @@
 'use client';
 
 import { type ReactNode } from 'react';
+import { usePathname } from 'next/navigation';
 import { useSidebar } from '@/contexts/SidebarContext';
-import { useViewMode } from '@/contexts/ViewModeContext';
 import { Sidebar } from './Sidebar';
-import { KanbanView } from './KanbanView';
 
 interface AppShellProps {
   children: ReactNode;
@@ -12,11 +11,11 @@ interface AppShellProps {
 
 export function AppShell({ children }: AppShellProps) {
   const { isCollapsed, toggle } = useSidebar();
-  const { viewMode } = useViewMode();
+  const pathname = usePathname();
 
-  // If kanban mode, render the KanbanView instead of the sidebar layout
-  if (viewMode === 'kanban') {
-    return <KanbanView />;
+  // If on a kanban route, render children directly (kanban pages handle their own layout)
+  if (pathname.startsWith('/kanban')) {
+    return <>{children}</>;
   }
 
   return (

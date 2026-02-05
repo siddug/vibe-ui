@@ -35,8 +35,9 @@ import {
   IconButton,
 } from '@/components/ui';
 import { FileExplorer } from '@/components/chat/FileExplorer';
+import { GitExplorer } from '@/components/chat/GitExplorer';
 
-type SessionTab = 'agent' | 'files';
+type SessionTab = 'agent' | 'files' | 'git';
 
 interface ConversationTurn {
   process: ExecutionProcess;
@@ -90,11 +91,11 @@ export function SessionDetailView({
   // Stream live logs for running process
   const { logs: liveLogs, isConnected, connectedProcessId } = useLogStream(runningProcess?.id || null);
 
-  // Stream approval requests (only when in_progress)
+  // Stream approval requests (when in_progress or waiting for approval)
   const {
     pendingApprovals,
     respond: respondToApproval,
-  } = useApprovalStream(session?.status === 'in_progress' ? sessionId : null);
+  } = useApprovalStream(session?.status === 'in_progress' || session?.status === 'approval' ? sessionId : null);
 
   const fetchSession = useCallback(async () => {
     try {
@@ -463,7 +464,7 @@ export function SessionDetailView({
       <div className="flex-shrink-0 border-b border-[var(--card-border)] bg-[var(--card-bg)]">
         <div className={`${maxWidthClass} mx-auto px-4`}>
           <div className="flex gap-0">
-            {(['agent', 'files'] as const).map((tab) => (
+            {(['agent', 'files', 'git'] as const).map((tab) => (
               <button
                 key={tab}
                 onClick={() => setActiveTab(tab)}
@@ -473,7 +474,7 @@ export function SessionDetailView({
                     : 'border-transparent text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 hover:border-gray-300'
                 }`}
               >
-                {tab === 'agent' ? 'Agent' : 'Files'}
+                {tab === 'agent' ? 'Agent' : tab === 'files' ? 'Files' : 'Git'}
               </button>
             ))}
           </div>
@@ -552,13 +553,18 @@ export function SessionDetailView({
             </div>
           </div>
         </>
-      ) : (
+      ) : activeTab === 'files' ? (
         /* Files Tab */
-        <div className="flex-1 overflow-hidden">
+        <div className="flex-1 overflow-hidden flex flex-col">
           <FileExplorer
             initialPath={session.workDir}
             mode="browse"
           />
+        </div>
+      ) : (
+        /* Git Tab */
+        <div className="flex-1 overflow-hidden flex flex-col">
+          <GitExplorer initialPath={session.workDir} />
         </div>
       )}
 
@@ -966,6 +972,34 @@ function parseLogContent(content: string): ParsedMessage[] {
         content: ensureString(data.output),
         toolId: data.toolCallId,
         isError: false,
+      }];
+    }
+
+    // Handle done event (emitted by vibe-server when session completes)
+    // - Vibe uses `stopReason` (e.g., "end_turn") and may include `result` with actual response
+    // - Claude uses `reason` which contains the actual result text
+    if (data.type === 'done') {
+      // Prefer `result` field (Vibe accumulated message), then `reason` (Claude result)
+      const actualResult = data.result;
+      const reasonContent = data.reason || data.stopReason;
+
+      // If we have actual result content, display that
+      if (actualResult && typeof actualResult === 'string' && actualResult.trim()) {
+        return [{
+          type: 'result',
+          content: actualResult,
+        }];
+      }
+
+      // Otherwise check if reason looks like actual content (not just a status)
+      const isActualContent = reasonContent &&
+        typeof reasonContent === 'string' &&
+        reasonContent !== 'completed' &&
+        !['end_turn', 'stop', 'max_tokens', 'tool_use'].includes(reasonContent);
+
+      return [{
+        type: 'result',
+        content: isActualContent ? reasonContent : `Completed${reasonContent ? ` (${reasonContent})` : ''}`,
       }];
     }
 

@@ -4,12 +4,14 @@ import { useState, useEffect, useCallback } from 'react';
 import {
   getConnectors,
   createSession,
+  createScheduledTask,
   fetchFromServer,
   type Connector,
   type ApprovalMode,
   type AgentMode,
   type ImageData,
   type HealthResponse,
+  type ScheduleType,
 } from '@/lib/api';
 import { WorkDirSelector } from '@/components/chat/WorkDirSelector';
 import { ConnectorSelector } from '@/components/chat/ConnectorSelector';
@@ -20,16 +22,20 @@ import { parseConfigString } from '@/lib/servers';
 
 interface SessionCreateFormProps {
   onSessionCreated?: (sessionId: string, startedImmediately: boolean) => void;
+  onScheduledTaskCreated?: () => void;
   onCancel?: () => void;
   showCancelButton?: boolean;
   showSaveToTriageButton?: boolean;
+  showScheduleButton?: boolean;
 }
 
 export function SessionCreateForm({
   onSessionCreated,
+  onScheduledTaskCreated,
   onCancel,
   showCancelButton = false,
   showSaveToTriageButton = false,
+  showScheduleButton = false,
 }: SessionCreateFormProps) {
   const { servers, addServer, switchServer } = useServer();
   const [connectors, setConnectors] = useState<Connector[]>([]);
@@ -48,9 +54,29 @@ export function SessionCreateForm({
   const [prompt, setPrompt] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [submittingToTriage, setSubmittingToTriage] = useState(false);
+  const [submittingSchedule, setSubmittingSchedule] = useState(false);
   const [approvalMode, setApprovalMode] = useState<ApprovalMode>('auto');
   const [agentMode, setAgentMode] = useState<AgentMode>('default');
   const [images, setImages] = useState<ImageData[]>([]);
+
+  // Scheduling state
+  const [showScheduleOptions, setShowScheduleOptions] = useState(false);
+  const [scheduleType, setScheduleType] = useState<ScheduleType>('cron');
+  const [cronExpression, setCronExpression] = useState('0 9 * * *'); // Default: 9 AM daily
+  const [runAt, setRunAt] = useState('');
+  const [timezone, setTimezone] = useState('UTC');
+  const [inheritContext, setInheritContext] = useState(false);
+
+  // Common cron presets
+  const cronPresets = [
+    { label: 'Every minute', value: '* * * * *' },
+    { label: 'Every hour', value: '0 * * * *' },
+    { label: 'Every day at 9 AM', value: '0 9 * * *' },
+    { label: 'Every day at midnight', value: '0 0 * * *' },
+    { label: 'Weekdays at 9 AM', value: '0 9 * * 1-5' },
+    { label: 'Every Sunday', value: '0 0 * * 0' },
+    { label: 'First of month', value: '0 0 1 * *' },
+  ];
 
   const handleValidateServer = async () => {
     setServerError(null);
@@ -142,6 +168,48 @@ export function SessionCreateForm({
       setError(err instanceof Error ? err.message : 'Failed to create session');
       setSubmitting(false);
       setSubmittingToTriage(false);
+    }
+  };
+
+  const handleScheduleSubmit = async () => {
+    if (!connector || !workDir || !prompt.trim()) {
+      setError('Please fill in all fields');
+      return;
+    }
+
+    if (scheduleType === 'cron' && !cronExpression) {
+      setError('Please enter a cron expression');
+      return;
+    }
+
+    if (scheduleType === 'once' && !runAt) {
+      setError('Please select a date and time');
+      return;
+    }
+
+    setSubmittingSchedule(true);
+    setError(null);
+
+    try {
+      await createScheduledTask({
+        prompt: prompt.trim(),
+        connector,
+        workDir,
+        scheduleType,
+        cronExpression: scheduleType === 'cron' ? cronExpression : undefined,
+        runAt: scheduleType === 'once' ? new Date(runAt).toISOString() : undefined,
+        timezone,
+        inheritContext,
+        agentMode,
+        approvalMode,
+      });
+      // Reset form state
+      setSubmittingSchedule(false);
+      setShowScheduleOptions(false);
+      onScheduledTaskCreated?.();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to create scheduled task');
+      setSubmittingSchedule(false);
     }
   };
 
@@ -335,26 +403,160 @@ export function SessionCreateForm({
           onChange={setPrompt}
           onSubmit={() => handleSubmit(true)}
           disabled={!connector || connectors.filter(c => c.status === 'available').length === 0}
-          submitting={submitting}
+          submitting={submitting || submittingSchedule}
           images={images}
           onImagesChange={setImages}
           placeholder="What would you like the agent to do? (Enter to send, Shift+Enter for new line)"
         />
       </div>
 
+      {/* Schedule Options (shown when Schedule button is clicked) */}
+      {showScheduleOptions && (
+        <div className="space-y-4 p-4 bg-gray-50 dark:bg-gray-800/50 rounded-lg border border-gray-200 dark:border-gray-700">
+          <div className="flex items-center justify-between">
+            <h3 className="font-medium text-gray-900 dark:text-gray-100">Schedule Options</h3>
+            <button
+              type="button"
+              onClick={() => setShowScheduleOptions(false)}
+              className="text-gray-400 hover:text-gray-500"
+            >
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+          </div>
+
+          {/* Schedule Type */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+              Schedule Type
+            </label>
+            <div className="flex gap-4">
+              <label className="flex items-center gap-2 cursor-pointer">
+                <input
+                  type="radio"
+                  name="scheduleType"
+                  value="cron"
+                  checked={scheduleType === 'cron'}
+                  onChange={() => setScheduleType('cron')}
+                  className="text-blue-600"
+                />
+                <span className="text-sm text-gray-700 dark:text-gray-300">Recurring (cron)</span>
+              </label>
+              <label className="flex items-center gap-2 cursor-pointer">
+                <input
+                  type="radio"
+                  name="scheduleType"
+                  value="once"
+                  checked={scheduleType === 'once'}
+                  onChange={() => setScheduleType('once')}
+                  className="text-blue-600"
+                />
+                <span className="text-sm text-gray-700 dark:text-gray-300">One-time</span>
+              </label>
+            </div>
+          </div>
+
+          {/* Cron Expression or DateTime */}
+          {scheduleType === 'cron' ? (
+            <div>
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                Cron Expression
+              </label>
+              <Input
+                value={cronExpression}
+                onChange={(e) => setCronExpression(e.target.value)}
+                placeholder="0 9 * * *"
+              />
+              <div className="mt-2 flex flex-wrap gap-2">
+                {cronPresets.map((preset) => (
+                  <button
+                    key={preset.value}
+                    type="button"
+                    onClick={() => setCronExpression(preset.value)}
+                    className={`px-2 py-1 text-xs rounded-md border transition-colors ${
+                      cronExpression === preset.value
+                        ? 'bg-blue-100 border-blue-300 text-blue-700 dark:bg-blue-900 dark:border-blue-700 dark:text-blue-300'
+                        : 'bg-gray-50 border-gray-200 text-gray-600 hover:bg-gray-100 dark:bg-gray-800 dark:border-gray-700 dark:text-gray-400 dark:hover:bg-gray-700'
+                    }`}
+                  >
+                    {preset.label}
+                  </button>
+                ))}
+              </div>
+              <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                Format: minute hour day-of-month month day-of-week
+              </p>
+            </div>
+          ) : (
+            <div>
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                Run At
+              </label>
+              <Input
+                type="datetime-local"
+                value={runAt}
+                onChange={(e) => setRunAt(e.target.value)}
+              />
+            </div>
+          )}
+
+          {/* Context Inheritance */}
+          <div className="border-t border-gray-200 dark:border-gray-700 pt-4">
+            <label className="flex items-start gap-3 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={inheritContext}
+                onChange={(e) => setInheritContext(e.target.checked)}
+                className="mt-1 text-blue-600"
+              />
+              <div>
+                <span className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                  Inherit context between runs
+                </span>
+                <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
+                  Each execution will continue from the previous session's context (conversation history).
+                </p>
+              </div>
+            </label>
+          </div>
+
+          {/* Create Schedule Button */}
+          <div className="pt-2">
+            <Button
+              onClick={handleScheduleSubmit}
+              disabled={!connector || !workDir || !prompt.trim() || submittingSchedule}
+              className="w-full"
+            >
+              {submittingSchedule ? <Spinner className="h-4 w-4 mr-2" /> : null}
+              Create Scheduled Task
+            </Button>
+          </div>
+        </div>
+      )}
+
       {/* Action Buttons */}
-      {(showCancelButton || showSaveToTriageButton) && (
+      {(showCancelButton || showSaveToTriageButton || showScheduleButton) && (
         <div className="flex justify-end gap-2 pt-2">
           {showCancelButton && (
-            <Button variant="ghost" onClick={onCancel} disabled={submitting}>
+            <Button variant="ghost" onClick={onCancel} disabled={submitting || submittingSchedule}>
               Cancel
+            </Button>
+          )}
+          {showScheduleButton && !showScheduleOptions && (
+            <Button
+              variant="secondary"
+              onClick={() => setShowScheduleOptions(true)}
+              disabled={!connector || !workDir || !prompt.trim() || submitting}
+            >
+              Schedule...
             </Button>
           )}
           {showSaveToTriageButton && (
             <Button
               variant="secondary"
               onClick={() => handleSubmit(false)}
-              disabled={!connector || !workDir || !prompt.trim() || submitting}
+              disabled={!connector || !workDir || !prompt.trim() || submitting || submittingSchedule}
             >
               {submittingToTriage ? <Spinner className="h-4 w-4 mr-2" /> : null}
               Save to Triage

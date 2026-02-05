@@ -1,19 +1,24 @@
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
+import { useRouter } from 'next/navigation';
 import { useTheme } from '@/contexts/ThemeContext';
 import { useViewMode } from '@/contexts/ViewModeContext';
 import {
   updateSessionStatus,
   type Session,
   type SessionStatus,
+  type ScheduledTask,
 } from '@/lib/api';
 import { usePaginatedSessions } from '@/hooks/usePaginatedSessions';
+import { useScheduledTasks } from '@/hooks/useScheduledTasks';
 import { Spinner } from '@/components/ui';
 import { SessionCreateModal } from '@/components/session/SessionCreateModal';
 import { SessionDetailModal } from '@/components/session/SessionDetailModal';
 import { ServerSwitcher } from '@/components/layout/ServerSwitcher';
 import { SettingsModal } from '@/components/layout/SettingsModal';
+import { ScheduledTaskCard } from '@/components/scheduled/ScheduledTaskCard';
+import { ScheduledTaskDetailModal } from '@/components/scheduled/ScheduledTaskDetailModal';
 
 const COLUMNS: { status: SessionStatus; title: string; color: string; bgColor: string }[] = [
   { status: 'triage', title: 'Todo', color: 'bg-gray-400', bgColor: 'bg-gray-50 dark:bg-gray-800/50' },
@@ -25,13 +30,89 @@ const COLUMNS: { status: SessionStatus; title: string; color: string; bgColor: s
   { status: 'archived', title: 'Archive', color: 'bg-slate-500', bgColor: 'bg-slate-50/30 dark:bg-slate-900/10' },
 ];
 
-export function KanbanView() {
+interface KanbanViewProps {
+  initialSessionId?: string;
+  initialCreateOpen?: boolean;
+}
+
+export function KanbanView({ initialSessionId, initialCreateOpen }: KanbanViewProps) {
+  const router = useRouter();
   const { theme, toggleTheme } = useTheme();
   const { toggleViewMode } = useViewMode();
   const { columns, loadMore, refresh, smartRefresh, moveSessionOptimistically } = usePaginatedSessions();
-  const [createModalOpen, setCreateModalOpen] = useState(false);
-  const [selectedSessionId, setSelectedSessionId] = useState<string | null>(null);
+  const {
+    tasks: scheduledTasks,
+    loading: scheduledTasksLoading,
+    refresh: refreshScheduledTasks,
+    enable: enableTask,
+    disable: disableTask,
+    trigger: triggerTask,
+  } = useScheduledTasks();
+  const [createModalOpen, setCreateModalOpen] = useState(initialCreateOpen ?? false);
+  const [selectedSessionId, setSelectedSessionId] = useState<string | null>(initialSessionId ?? null);
+  const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
+
+  // Sync state with props on initial mount (for direct URL navigation/reload)
+  useEffect(() => {
+    setSelectedSessionId(initialSessionId ?? null);
+  }, [initialSessionId]);
+
+  useEffect(() => {
+    setCreateModalOpen(initialCreateOpen ?? false);
+  }, [initialCreateOpen]);
+
+  // URL update helpers - use history API to avoid full page navigation
+  const openSession = (sessionId: string) => {
+    setSelectedSessionId(sessionId);
+    window.history.pushState(null, '', `/kanban/${sessionId}`);
+  };
+
+  const closeSession = () => {
+    setSelectedSessionId(null);
+    window.history.pushState(null, '', '/kanban');
+  };
+
+  const openCreateModal = () => {
+    setCreateModalOpen(true);
+    window.history.pushState(null, '', '/kanban/new');
+  };
+
+  const closeCreateModal = () => {
+    setCreateModalOpen(false);
+    window.history.pushState(null, '', '/kanban');
+  };
+
+  // Scheduled task modal handlers
+  const openScheduledTask = (taskId: string) => {
+    setSelectedTaskId(taskId);
+  };
+
+  const closeScheduledTask = () => {
+    setSelectedTaskId(null);
+  };
+
+  const handleToggleTaskEnabled = async (taskId: string, enabled: boolean) => {
+    try {
+      if (enabled) {
+        await enableTask(taskId);
+      } else {
+        await disableTask(taskId);
+      }
+    } catch (err) {
+      console.error('Failed to toggle task:', err);
+    }
+  };
+
+  const handleTriggerTask = async (taskId: string) => {
+    try {
+      await triggerTask(taskId);
+      // Also refresh sessions since a new one was created
+      refresh();
+    } catch (err) {
+      console.error('Failed to trigger task:', err);
+    }
+  };
 
   // Drag state
   const [draggedSession, setDraggedSession] = useState<Session | null>(null);
@@ -175,6 +256,16 @@ export function KanbanView() {
           </div>
         ) : (
           <div className="flex gap-3 h-full min-w-max min-h-full">
+            {/* Scheduled Tasks Column */}
+            <ScheduledTasksColumn
+              tasks={scheduledTasks}
+              loading={scheduledTasksLoading}
+              onTaskClick={openScheduledTask}
+              onToggleEnabled={handleToggleTaskEnabled}
+              onTrigger={handleTriggerTask}
+              onCreateClick={openCreateModal}
+            />
+
             {COLUMNS.map((column) => (
               <KanbanColumn
                 key={column.status}
@@ -192,9 +283,9 @@ export function KanbanView() {
                 isDragOver={dragOverColumn === column.status}
                 onDragStart={handleDragStart}
                 onDragEnd={handleDragEnd}
-                onCardClick={setSelectedSessionId}
+                onCardClick={openSession}
                 draggedSessionId={draggedSession?.id ?? null}
-                onCreateClick={() => setCreateModalOpen(true)}
+                onCreateClick={openCreateModal}
                 onBulkMove={handleBulkMove}
               />
             ))}
@@ -205,8 +296,9 @@ export function KanbanView() {
       {/* Create Modal */}
       <SessionCreateModal
         open={createModalOpen}
-        onClose={() => setCreateModalOpen(false)}
+        onClose={closeCreateModal}
         onCreated={refresh}
+        onScheduledTaskCreated={refreshScheduledTasks}
       />
 
       {/* Detail Modal */}
@@ -214,7 +306,7 @@ export function KanbanView() {
         <SessionDetailModal
           sessionId={selectedSessionId}
           open={!!selectedSessionId}
-          onClose={() => setSelectedSessionId(null)}
+          onClose={closeSession}
         />
       )}
 
@@ -223,6 +315,16 @@ export function KanbanView() {
         open={settingsOpen}
         onClose={() => setSettingsOpen(false)}
       />
+
+      {/* Scheduled Task Detail Modal */}
+      {selectedTaskId && (
+        <ScheduledTaskDetailModal
+          taskId={selectedTaskId}
+          open={!!selectedTaskId}
+          onClose={closeScheduledTask}
+          onUpdated={refreshScheduledTasks}
+        />
+      )}
     </div>
   );
 }
@@ -595,6 +697,92 @@ function SessionCard({ session, onDragStart, onDragEnd, onClick, isDragging }: S
           <div className="ml-auto">
             <Spinner className="h-4 w-4 text-blue-500" />
           </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// Scheduled Tasks Column Component
+interface ScheduledTasksColumnProps {
+  tasks: ScheduledTask[];
+  loading: boolean;
+  onTaskClick: (taskId: string) => void;
+  onToggleEnabled: (taskId: string, enabled: boolean) => void;
+  onTrigger: (taskId: string) => void;
+  onCreateClick: () => void;
+}
+
+function ScheduledTasksColumn({
+  tasks = [],
+  loading,
+  onTaskClick,
+  onToggleEnabled,
+  onTrigger,
+  onCreateClick,
+}: ScheduledTasksColumnProps) {
+  const enabledTasks = tasks.filter(t => t.enabled);
+  const disabledTasks = tasks.filter(t => !t.enabled);
+
+  return (
+    <div className="flex flex-col w-72 h-full bg-blue-50/30 dark:bg-blue-900/10 rounded-lg">
+      {/* Column Header */}
+      <div className="flex items-center justify-between px-3 py-2.5">
+        <div className="flex items-center gap-2">
+          <div className="w-1 h-4 rounded-full bg-blue-500" />
+          <h2 className="font-medium text-sm text-gray-700 dark:text-gray-200">Scheduled</h2>
+          <span className="text-sm text-gray-400">
+            {enabledTasks.length}
+          </span>
+        </div>
+        <button
+          onClick={onCreateClick}
+          className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-colors cursor-pointer"
+          title="Add scheduled task"
+        >
+          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+          </svg>
+        </button>
+      </div>
+
+      {/* Column Content */}
+      <div className="flex-1 overflow-y-auto px-2 pb-2 space-y-2">
+        {loading ? (
+          <div className="flex items-center justify-center py-8">
+            <Spinner className="h-6 w-6 text-blue-500" />
+          </div>
+        ) : tasks.length === 0 ? (
+          <div className="text-center py-8 text-gray-400 dark:text-gray-500 text-sm">
+            No scheduled tasks
+          </div>
+        ) : (
+          <>
+            {/* Enabled tasks first */}
+            {enabledTasks.map((task) => (
+              <ScheduledTaskCard
+                key={task.id}
+                task={task}
+                onClick={() => onTaskClick(task.id)}
+                onToggleEnabled={(enabled) => onToggleEnabled(task.id, enabled)}
+                onTrigger={() => onTrigger(task.id)}
+              />
+            ))}
+            {/* Disabled tasks */}
+            {disabledTasks.length > 0 && enabledTasks.length > 0 && (
+              <div className="text-xs text-gray-400 dark:text-gray-500 px-1 pt-2">
+                Disabled ({disabledTasks.length})
+              </div>
+            )}
+            {disabledTasks.map((task) => (
+              <ScheduledTaskCard
+                key={task.id}
+                task={task}
+                onClick={() => onTaskClick(task.id)}
+                onToggleEnabled={(enabled) => onToggleEnabled(task.id, enabled)}
+              />
+            ))}
+          </>
         )}
       </div>
     </div>

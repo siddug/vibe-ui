@@ -14,7 +14,7 @@ export function SessionDetailModal({ sessionId, open, onClose }: SessionDetailMo
   const router = useRouter();
 
   return (
-    <Dialog open={open} onClose={onClose} className="max-w-5xl w-full max-h-[90vh]">
+    <Dialog open={open} onClose={onClose} className="max-w-[95vw] w-full" fullHeight>
       <SessionDetailView
         sessionId={sessionId}
         compact

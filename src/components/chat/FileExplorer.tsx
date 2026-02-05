@@ -101,7 +101,7 @@ export function FileExplorer({ initialPath, mode, onSelect, onCancel }: FileExpl
   const canSelect = mode === 'select-directory' ? selectedType === 'directory' : selectedPath !== null;
 
   return (
-    <div className={`flex flex-col ${mode === 'browse' ? 'h-full' : 'h-[480px]'}`}>
+    <div className={`flex flex-col overflow-hidden ${mode === 'browse' ? 'h-full' : 'h-[480px]'}`}>
       {/* Path bar */}
       <div className="px-4 py-2 border-b border-[var(--card-border)] bg-[var(--sidebar-bg)] flex items-center gap-2 min-h-[40px]">
         <svg className="w-4 h-4 text-gray-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -115,13 +115,13 @@ export function FileExplorer({ initialPath, mode, onSelect, onCancel }: FileExpl
       {/* Columns container */}
       <div
         ref={scrollContainerRef}
-        className="flex-1 overflow-x-auto overflow-y-hidden bg-gray-50 dark:bg-gray-900"
+        className="flex-1 flex flex-col overflow-x-auto overflow-y-hidden bg-gray-50 dark:bg-gray-900"
       >
-        <div className="flex h-full min-w-max">
+        <div className="flex h-full overflow-hidden min-w-max">
           {columns.map((column, idx) => (
             <div
               key={`${column.path}-${idx}`}
-              className="w-56 h-full flex flex-col border-r border-[var(--card-border)] shrink-0"
+              className="w-56 flex flex-col border-r border-[var(--card-border)] shrink-0"
             >
               {column.loading ? (
                 <div className="flex-1 flex items-center justify-center">

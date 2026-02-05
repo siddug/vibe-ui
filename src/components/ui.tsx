@@ -244,10 +244,14 @@ interface DialogProps {
   children: React.ReactNode;
   title?: string;
   className?: string;
+  /** When true, dialog expands to fill available height (90vh) instead of shrinking to content */
+  fullHeight?: boolean;
 }
 
-export function Dialog({ open, onClose, children, title, className = 'max-w-lg' }: DialogProps) {
+export function Dialog({ open, onClose, children, title, className = 'max-w-lg', fullHeight = false }: DialogProps) {
   if (!open) return null;
+
+  const heightClasses = fullHeight ? 'h-[90vh]' : 'max-h-[90vh]';
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center">
@@ -255,9 +259,9 @@ export function Dialog({ open, onClose, children, title, className = 'max-w-lg' 
         className="fixed inset-0 bg-black/50"
         onClick={onClose}
       />
-      <div className={`relative bg-[var(--card-bg)] rounded-lg shadow-xl w-full mx-4 max-h-[90vh] overflow-hidden flex flex-col ${className}`}>
+      <div className={`relative bg-[var(--card-bg)] rounded-lg shadow-xl w-full mx-4 ${heightClasses} overflow-hidden flex flex-col ${className}`}>
         {title && (
-          <div className="px-4 py-3 border-b border-[var(--card-border)] flex items-center justify-between">
+          <div className="px-4 py-3 border-b border-[var(--card-border)] flex items-center justify-between flex-shrink-0">
             <h2 className="text-lg font-semibold">{title}</h2>
             <button
               onClick={onClose}
@@ -269,7 +273,7 @@ export function Dialog({ open, onClose, children, title, className = 'max-w-lg' 
             </button>
           </div>
         )}
-        <div className="p-0 flex flex-col max-h-full overflow-y-scroll">{children}</div>
+        <div className={`p-0 flex flex-col overflow-y-auto ${fullHeight ? 'flex-1 min-h-0' : 'max-h-full'}`}>{children}</div>
       </div>
     </div>
   );

@@ -1,6 +1,7 @@
 'use client';
 
-import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import { createContext, useContext, ReactNode } from 'react';
+import { useRouter, usePathname } from 'next/navigation';
 
 export type ViewMode = 'sidebar' | 'kanban';
 
@@ -12,39 +13,32 @@ interface ViewModeContextType {
 
 const ViewModeContext = createContext<ViewModeContextType | undefined>(undefined);
 
-const STORAGE_KEY = 'vibex-view-mode';
-
 interface ViewModeProviderProps {
   children: ReactNode;
 }
 
 export function ViewModeProvider({ children }: ViewModeProviderProps) {
-  const [viewMode, setViewModeState] = useState<ViewMode>('sidebar');
-  const [mounted, setMounted] = useState(false);
+  const router = useRouter();
+  const pathname = usePathname();
 
-  // Load from localStorage on mount
-  useEffect(() => {
-    const stored = localStorage.getItem(STORAGE_KEY);
-    if (stored === 'kanban' || stored === 'sidebar') {
-      setViewModeState(stored);
-    }
-    setMounted(true);
-  }, []);
+  // Derive view mode from the current URL
+  const viewMode: ViewMode = pathname.startsWith('/kanban') ? 'kanban' : 'sidebar';
 
   const setViewMode = (mode: ViewMode) => {
-    setViewModeState(mode);
-    localStorage.setItem(STORAGE_KEY, mode);
+    if (mode === 'kanban') {
+      router.push('/kanban');
+    } else {
+      router.push('/');
+    }
   };
 
   const toggleViewMode = () => {
-    const newMode = viewMode === 'sidebar' ? 'kanban' : 'sidebar';
-    setViewMode(newMode);
+    if (viewMode === 'kanban') {
+      router.push('/');
+    } else {
+      router.push('/kanban');
+    }
   };
-
-  // Prevent hydration mismatch
-  if (!mounted) {
-    return null;
-  }
 
   return (
     <ViewModeContext.Provider value={{ viewMode, setViewMode, toggleViewMode }}>

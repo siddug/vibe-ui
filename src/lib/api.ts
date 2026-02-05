@@ -204,6 +204,95 @@ export interface UpdateSessionStatusRequest {
   status: SessionStatus;
 }
 
+// Schedule type for scheduled tasks
+export type ScheduleType = 'once' | 'cron';
+
+// Scheduled task types
+export interface ScheduledTask {
+  id: string;
+  name: string;
+  prompt: string;
+  connectorType: string;
+  workDir: string;
+  scheduleType: ScheduleType;
+  cronExpression: string | null;
+  nextRunAt: string | null;
+  timezone: string;
+  inheritContext: boolean;
+  lastSessionId: string | null;
+  lastAgentSessionId: string | null;
+  agentMode: AgentMode;
+  approvalMode: ApprovalMode;
+  env: string | null;
+  enabled: boolean;
+  executionCount: number;
+  lastRunAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ScheduledTasksResponse {
+  tasks: ScheduledTask[];
+  total: number;
+  limit: number;
+  offset: number;
+  hasMore: boolean;
+}
+
+export interface GetScheduledTasksParams {
+  enabled?: boolean;
+  limit?: number;
+  offset?: number;
+}
+
+export interface CreateScheduledTaskRequest {
+  name?: string; // Optional - will be auto-generated from prompt if not provided
+  prompt: string;
+  connector: string;
+  workDir: string;
+  scheduleType: ScheduleType;
+  cronExpression?: string;
+  runAt?: string; // ISO datetime
+  timezone?: string;
+  inheritContext?: boolean;
+  agentMode?: AgentMode;
+  approvalMode?: ApprovalMode;
+  env?: Record<string, string>;
+}
+
+export interface UpdateScheduledTaskRequest {
+  name?: string;
+  prompt?: string;
+  connector?: string;
+  workDir?: string;
+  scheduleType?: ScheduleType;
+  cronExpression?: string;
+  runAt?: string;
+  timezone?: string;
+  inheritContext?: boolean;
+  agentMode?: AgentMode;
+  approvalMode?: ApprovalMode;
+  env?: Record<string, string>;
+  enabled?: boolean;
+}
+
+export interface ScheduledTaskHistoryResponse {
+  taskId: string;
+  executions: Session[];
+  total: number;
+}
+
+export interface TriggerTaskResponse {
+  message: string;
+  result: {
+    sessionId: string;
+    processId: string;
+    agentSessionId?: string;
+    success: boolean;
+    error?: string;
+  };
+}
+
 // API Key types
 export interface ApiKey {
   id: string;
@@ -476,5 +565,214 @@ export async function deleteApiKey(
 ): Promise<{ status: string; provider: string }> {
   return fetchApi(`/api/settings/api-keys/${provider}`, {
     method: 'DELETE',
+  });
+}
+
+// Git types and API functions
+
+/**
+ * Git availability status
+ */
+export interface GitAvailability {
+  available: boolean;
+  version?: string;
+  error?: string;
+}
+
+/**
+ * Git file change status
+ */
+export type GitFileStatus = 'added' | 'modified' | 'deleted' | 'renamed' | 'untracked';
+
+/**
+ * A file with git change information
+ */
+export interface GitFileChange {
+  path: string;
+  status: GitFileStatus;
+  oldPath?: string;
+  staged: boolean;
+}
+
+/**
+ * Git repository information
+ */
+export interface GitRepoInfo {
+  branch: string;
+  remoteBranch?: string;
+  remoteUrl?: string;
+  lastCommit?: {
+    hash: string;
+    shortHash: string;
+    message: string;
+    author: string;
+    date: string;
+  };
+  ahead: number;
+  behind: number;
+}
+
+/**
+ * Git status response
+ */
+export interface GitStatus {
+  isGitRepo: boolean;
+  gitAvailable: boolean;
+  gitVersion?: string;
+  repoRoot?: string;
+  info?: GitRepoInfo;
+  changes?: GitFileChange[];
+  error?: string;
+}
+
+/**
+ * Git diff response
+ */
+export interface GitDiff {
+  path: string;
+  diff: string;
+  additions: number;
+  deletions: number;
+  isBinary: boolean;
+  isNew: boolean;
+  isDeleted: boolean;
+}
+
+/**
+ * Check if git is available on the server
+ */
+export async function checkGitAvailable(): Promise<GitAvailability> {
+  return fetchApi('/api/git/available');
+}
+
+/**
+ * Get git status for a directory
+ */
+export async function getGitStatus(path: string): Promise<GitStatus> {
+  const params = new URLSearchParams({ path });
+  return fetchApi(`/api/git/status?${params.toString()}`);
+}
+
+/**
+ * Get diff for a specific file
+ */
+export async function getGitDiff(
+  repoPath: string,
+  filePath: string,
+  staged?: boolean
+): Promise<GitDiff> {
+  const params = new URLSearchParams({ path: repoPath, file: filePath });
+  if (staged) params.set('staged', 'true');
+  return fetchApi(`/api/git/diff?${params.toString()}`);
+}
+
+// Scheduled Tasks API
+
+/**
+ * Get all scheduled tasks
+ */
+export async function getScheduledTasks(
+  params?: GetScheduledTasksParams
+): Promise<ScheduledTasksResponse> {
+  const searchParams = new URLSearchParams();
+  if (params?.enabled !== undefined) searchParams.set('enabled', String(params.enabled));
+  if (params?.limit) searchParams.set('limit', String(params.limit));
+  if (params?.offset) searchParams.set('offset', String(params.offset));
+  const query = searchParams.toString();
+  return fetchApi(`/api/scheduled-tasks${query ? `?${query}` : ''}`);
+}
+
+/**
+ * Get a single scheduled task by ID
+ */
+export async function getScheduledTask(id: string): Promise<ScheduledTask> {
+  return fetchApi(`/api/scheduled-tasks/${id}`);
+}
+
+/**
+ * Get execution history for a scheduled task
+ */
+export async function getScheduledTaskHistory(
+  id: string,
+  limit?: number
+): Promise<ScheduledTaskHistoryResponse> {
+  const params = new URLSearchParams();
+  if (limit) params.set('limit', String(limit));
+  const query = params.toString();
+  return fetchApi(`/api/scheduled-tasks/${id}/history${query ? `?${query}` : ''}`);
+}
+
+/**
+ * Create a new scheduled task
+ */
+export async function createScheduledTask(
+  data: CreateScheduledTaskRequest
+): Promise<ScheduledTask> {
+  return fetchApi('/api/scheduled-tasks', {
+    method: 'POST',
+    body: JSON.stringify(data),
+  });
+}
+
+/**
+ * Update a scheduled task
+ */
+export async function updateScheduledTask(
+  id: string,
+  data: UpdateScheduledTaskRequest
+): Promise<ScheduledTask> {
+  return fetchApi(`/api/scheduled-tasks/${id}`, {
+    method: 'PATCH',
+    body: JSON.stringify(data),
+  });
+}
+
+/**
+ * Delete a scheduled task
+ */
+export async function deleteScheduledTask(id: string): Promise<void> {
+  const url = `${getApiBase()}/api/scheduled-tasks/${id}`;
+  const headers: Record<string, string> = {};
+  const authKey = getAuthKey();
+  if (authKey) {
+    headers['Authorization'] = `Bearer ${authKey}`;
+  }
+
+  const response = await fetch(url, {
+    method: 'DELETE',
+    headers,
+  });
+
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({ message: response.statusText }));
+    throw new Error(error.message || `API error: ${response.status}`);
+  }
+  // DELETE responses typically have no body, so don't try to parse JSON
+}
+
+/**
+ * Enable a scheduled task
+ */
+export async function enableScheduledTask(id: string): Promise<ScheduledTask> {
+  return fetchApi(`/api/scheduled-tasks/${id}/enable`, {
+    method: 'POST',
+  });
+}
+
+/**
+ * Disable a scheduled task
+ */
+export async function disableScheduledTask(id: string): Promise<ScheduledTask> {
+  return fetchApi(`/api/scheduled-tasks/${id}/disable`, {
+    method: 'POST',
+  });
+}
+
+/**
+ * Manually trigger a scheduled task to run now
+ */
+export async function triggerScheduledTask(id: string): Promise<TriggerTaskResponse> {
+  return fetchApi(`/api/scheduled-tasks/${id}/trigger`, {
+    method: 'POST',
   });
 }
