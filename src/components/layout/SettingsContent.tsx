@@ -5,11 +5,16 @@ import {
   getApiKeys,
   saveApiKey,
   deleteApiKey,
+  getSkillsConfig,
+  updateSkillsConfig,
+  getSkillsStatus,
   type ApiKey,
+  type SkillsStatus,
 } from '@/lib/api';
-import { Button, Input, Card, CardHeader, CardContent, Spinner, Dropdown } from '@/components/ui';
+import { Button, Input, Card, CardHeader, CardContent, Spinner, Dropdown, Dialog } from '@/components/ui';
 import { useServer } from '@/contexts/ServerContext';
 import { AddServerModal } from '@/components/layout/AddServerModal';
+import { FileExplorer } from '@/components/chat/FileExplorer';
 
 const PROVIDERS = [
   { value: 'mistral', label: 'Mistral AI' },
@@ -29,6 +34,14 @@ export function SettingsContent() {
   const [apiKeyInput, setApiKeyInput] = useState('');
   const [saving, setSaving] = useState(false);
 
+  // Skills directory state
+  const [skillsDir, setSkillsDir] = useState<string>('');
+  const [skillsDefaultDir, setSkillsDefaultDir] = useState<string>('');
+  const [skillsStatus, setSkillsStatus] = useState<SkillsStatus | null>(null);
+  const [skillsLoading, setSkillsLoading] = useState(true);
+  const [skillsSaving, setSkillsSaving] = useState(false);
+  const [showSkillsPicker, setShowSkillsPicker] = useState(false);
+
   const fetchApiKeys = useCallback(async () => {
     try {
       setError(null);
@@ -41,9 +54,31 @@ export function SettingsContent() {
     }
   }, []);
 
+  const fetchSkillsConfig = useCallback(async () => {
+    try {
+      const config = await getSkillsConfig();
+      setSkillsDir(config.globalDirectory || '');
+      setSkillsDefaultDir(config.defaultDirectory);
+
+      // Also fetch status if configured
+      if (config.globalDirectory) {
+        const status = await getSkillsStatus();
+        setSkillsStatus(status);
+      } else {
+        setSkillsStatus(null);
+      }
+    } catch (err) {
+      // Ignore errors for skills config - it's optional
+      console.error('Failed to fetch skills config:', err);
+    } finally {
+      setSkillsLoading(false);
+    }
+  }, []);
+
   useEffect(() => {
     fetchApiKeys();
-  }, [fetchApiKeys]);
+    fetchSkillsConfig();
+  }, [fetchApiKeys, fetchSkillsConfig]);
 
   const handleSaveKey = async () => {
     if (!apiKeyInput.trim()) {
@@ -75,6 +110,36 @@ export function SettingsContent() {
       fetchApiKeys();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to delete API key');
+    }
+  };
+
+  const handleSaveSkillsDir = async () => {
+    setSkillsSaving(true);
+    setError(null);
+
+    try {
+      await updateSkillsConfig(skillsDir.trim() || null);
+      // Refresh status
+      await fetchSkillsConfig();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to save skills directory');
+    } finally {
+      setSkillsSaving(false);
+    }
+  };
+
+  const handleClearSkillsDir = async () => {
+    setSkillsSaving(true);
+    setError(null);
+
+    try {
+      await updateSkillsConfig(null);
+      setSkillsDir('');
+      setSkillsStatus(null);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to clear skills directory');
+    } finally {
+      setSkillsSaving(false);
     }
   };
 
@@ -226,6 +291,136 @@ export function SettingsContent() {
           </div>
         </CardContent>
       </Card>
+
+      {/* Skills Directory Section */}
+      <Card>
+        <CardHeader>
+          <h2 className="text-lg font-semibold">Skills Directory</h2>
+          <p className="text-sm text-gray-500 mt-1">
+            Configure a shared directory for skills/commands that will be linked to Claude Code and Vibe agents at session start.
+          </p>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {skillsLoading ? (
+            <div className="flex items-center justify-center py-4">
+              <Spinner className="h-5 w-5 text-gray-400" />
+            </div>
+          ) : (
+            <>
+              {/* Directory Input */}
+              <div className="space-y-2">
+                <div className="flex gap-2 items-center">
+                  <div className="relative flex-1">
+                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400">
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" />
+                      </svg>
+                    </span>
+                    <Input
+                      value={skillsDir}
+                      onChange={(e) => setSkillsDir(e.target.value)}
+                      placeholder={skillsDefaultDir || '~/.vibe-server/skills'}
+                      className="pl-9 h-10"
+                    />
+                  </div>
+                  <Button
+                    variant="secondary"
+                    onClick={() => setShowSkillsPicker(true)}
+                    title="Browse filesystem"
+                  >
+                    Browse
+                  </Button>
+                  <Button
+                    onClick={handleSaveSkillsDir}
+                    disabled={skillsSaving}
+                  >
+                    {skillsSaving ? <Spinner className="h-4 w-4" /> : 'Save'}
+                  </Button>
+                  {skillsStatus?.configured && (
+                    <Button
+                      variant="danger"
+                      onClick={handleClearSkillsDir}
+                      disabled={skillsSaving}
+                    >
+                      Clear
+                    </Button>
+                  )}
+                </div>
+                <p className="text-xs text-gray-500">
+                  Default: {skillsDefaultDir}
+                </p>
+              </div>
+
+              {/* Skills Status */}
+              {skillsStatus?.configured && (
+                <div className="pt-4 border-t border-[var(--card-border)]">
+                  {skillsStatus.valid ? (
+                    <div className="space-y-2">
+                      <div className="flex items-center gap-2">
+                        <span className="w-2 h-2 bg-green-500 rounded-full"></span>
+                        <span className="text-sm font-medium text-green-700 dark:text-green-400">
+                          Directory valid
+                        </span>
+                      </div>
+                      {skillsStatus.skills && skillsStatus.skills.skills.length > 0 && (
+                        <div className="text-sm text-gray-600 dark:text-gray-400">
+                          <p>
+                            Skills: {skillsStatus.skills.skills.join(', ')}
+                          </p>
+                        </div>
+                      )}
+                    </div>
+                  ) : (
+                    <div className="flex items-center gap-2">
+                      <span className="w-2 h-2 bg-red-500 rounded-full"></span>
+                      <span className="text-sm text-red-700 dark:text-red-400">
+                        {skillsStatus.error || 'Invalid directory'}
+                      </span>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Expected Structure Help */}
+              {!skillsStatus?.configured && (
+                <div className="pt-4 border-t border-[var(--card-border)]">
+                  <p className="text-xs text-gray-500 mb-2">Expected directory structure:</p>
+                  <pre className="text-xs bg-gray-100 dark:bg-gray-800 p-2 rounded font-mono overflow-x-auto">
+{`skills/
+├── gmail/
+│   └── SKILL.md
+├── notion/
+│   └── SKILL.md
+└── slack/
+    └── SKILL.md`}
+                  </pre>
+                  <p className="text-xs text-gray-500 mt-2">
+                    Each skill directory will be symlinked to both Claude Code and Vibe agent config directories.
+                  </p>
+                </div>
+              )}
+            </>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Skills Directory Picker Dialog */}
+      <Dialog
+        open={showSkillsPicker}
+        onClose={() => setShowSkillsPicker(false)}
+        title="Select Skills Directory"
+        className="max-w-3xl"
+      >
+        <FileExplorer
+          initialPath={skillsDir || skillsDefaultDir || '~'}
+          mode="select-directory"
+          onSelect={(path) => {
+            setSkillsDir(path);
+            setShowSkillsPicker(false);
+          }}
+          onCancel={() => setShowSkillsPicker(false)}
+        />
+      </Dialog>
     </div>
   );
 }

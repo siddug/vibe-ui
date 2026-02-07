@@ -6,6 +6,7 @@ import {
   createSession,
   createScheduledTask,
   fetchFromServer,
+  getSkillsConfig,
   type Connector,
   type ApprovalMode,
   type AgentMode,
@@ -66,6 +67,11 @@ export function SessionCreateForm({
   const [runAt, setRunAt] = useState('');
   const [timezone, setTimezone] = useState('UTC');
   const [inheritContext, setInheritContext] = useState(false);
+
+  // Advanced options state
+  const [showAdvanced, setShowAdvanced] = useState(false);
+  const [skillsDirectory, setSkillsDirectory] = useState('');
+  const [globalSkillsDir, setGlobalSkillsDir] = useState<string | null>(null);
 
   // Common cron presets
   const cronPresets = [
@@ -129,13 +135,26 @@ export function SessionCreateForm({
     }
   }, [connector]);
 
+  const fetchSkillsConfig = useCallback(async () => {
+    try {
+      const config = await getSkillsConfig();
+      if (config.globalDirectory) {
+        setGlobalSkillsDir(config.globalDirectory);
+        setSkillsDirectory(config.globalDirectory);
+      }
+    } catch {
+      // Ignore - skills config is optional
+    }
+  }, []);
+
   useEffect(() => {
     if (servers.length > 0) {
       fetchConnectors();
+      fetchSkillsConfig();
     } else {
       setLoading(false);
     }
-  }, [fetchConnectors, servers.length]);
+  }, [fetchConnectors, fetchSkillsConfig, servers.length]);
 
   const handleSubmit = async (startImmediately: boolean = true) => {
     if (!connector || !workDir || (!prompt.trim() && images.length === 0)) {
@@ -159,6 +178,7 @@ export function SessionCreateForm({
         approvalMode,
         agentMode,
         images: images.length > 0 ? images : undefined,
+        skillsDirectory: skillsDirectory.trim() || undefined,
       });
       // Reset form state before calling callback to ensure clean dismissal
       setSubmitting(false);
@@ -392,6 +412,43 @@ export function SessionCreateForm({
               </div>
             </button>
           </div>
+        </div>
+
+        {/* Advanced Options Toggle */}
+        <div className="pt-2">
+          <button
+            type="button"
+            onClick={() => setShowAdvanced(!showAdvanced)}
+            className="text-sm text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 flex items-center gap-1"
+          >
+            <svg
+              className={`w-4 h-4 transition-transform ${showAdvanced ? 'rotate-90' : ''}`}
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+            </svg>
+            Advanced Options
+          </button>
+
+          {showAdvanced && (
+            <div className="mt-3 p-3 bg-gray-50 dark:bg-gray-800/50 rounded-lg border border-gray-200 dark:border-gray-700 space-y-3">
+              {/* Skills Directory */}
+              <div>
+                <label className="block text-sm font-medium mb-1">
+                  Skills Directory
+                  {globalSkillsDir && (
+                    <span className="ml-2 text-xs font-normal text-gray-500">(from global settings)</span>
+                  )}
+                </label>
+                <p className="text-xs text-gray-500 dark:text-gray-400 mb-2">
+                  Override the global skills directory for this session. Leave empty to skip skill injection.
+                </p>
+                <WorkDirSelector value={skillsDirectory} onChange={setSkillsDirectory} />
+              </div>
+            </div>
+          )}
         </div>
       </div>
 

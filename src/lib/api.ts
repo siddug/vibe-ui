@@ -139,6 +139,7 @@ export interface CreateSessionRequest {
   sessionName?: string;
   startImmediately?: boolean;
   images?: ImageData[];
+  skillsDirectory?: string;
 }
 
 export interface CreateSessionResponse {
@@ -775,4 +776,55 @@ export async function triggerScheduledTask(id: string): Promise<TriggerTaskRespo
   return fetchApi(`/api/scheduled-tasks/${id}/trigger`, {
     method: 'POST',
   });
+}
+
+// Skills Settings API
+
+/**
+ * Skills configuration response
+ */
+export interface SkillsConfig {
+  globalDirectory: string | null;
+  defaultDirectory: string;
+}
+
+/**
+ * Skills status response
+ */
+export interface SkillsStatus {
+  configured: boolean;
+  globalDirectory?: string;
+  resolvedDirectory?: string;
+  valid?: boolean;
+  error?: string;
+  skills?: {
+    skills: string[];
+  };
+  defaultDirectory?: string;
+}
+
+/**
+ * Get skills configuration
+ */
+export async function getSkillsConfig(): Promise<SkillsConfig> {
+  return fetchApi('/api/settings/skills');
+}
+
+/**
+ * Update skills configuration
+ */
+export async function updateSkillsConfig(
+  globalDirectory: string | null
+): Promise<{ status: string; globalDirectory: string | null }> {
+  return fetchApi('/api/settings/skills', {
+    method: 'PUT',
+    body: JSON.stringify({ globalDirectory }),
+  });
+}
+
+/**
+ * Get skills status (validation and contents)
+ */
+export async function getSkillsStatus(): Promise<SkillsStatus> {
+  return fetchApi('/api/settings/skills/status');
 }
