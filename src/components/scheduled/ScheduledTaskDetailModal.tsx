@@ -89,6 +89,7 @@ export function ScheduledTaskDetailModal({ taskId, open, onClose, onUpdated }: S
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [deleting, setDeleting] = useState(false);
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
   const [triggering, setTriggering] = useState(false);
 
   // Edit mode state
@@ -113,8 +114,8 @@ export function ScheduledTaskDetailModal({ taskId, open, onClose, onUpdated }: S
     }
   }, [open, taskId]);
 
-  const loadTaskData = async () => {
-    setLoading(true);
+  const loadTaskData = async (showLoading = true) => {
+    if (showLoading) setLoading(true);
     setError(null);
     try {
       const [taskData, historyData, connectorsData] = await Promise.all([
@@ -140,7 +141,7 @@ export function ScheduledTaskDetailModal({ taskId, open, onClose, onUpdated }: S
       } else {
         await enableScheduledTask(taskId);
       }
-      await loadTaskData();
+      await loadTaskData(false);
       onUpdated();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to toggle task');
@@ -151,7 +152,7 @@ export function ScheduledTaskDetailModal({ taskId, open, onClose, onUpdated }: S
     setTriggering(true);
     try {
       await triggerScheduledTask(taskId);
-      await loadTaskData();
+      await loadTaskData(false);
       onUpdated();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to trigger task');
@@ -222,7 +223,7 @@ export function ScheduledTaskDetailModal({ taskId, open, onClose, onUpdated }: S
         workDir: editWorkDir,
       });
       setEditMode(false);
-      await loadTaskData();
+      await loadTaskData(false);
       onUpdated();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to update task');
@@ -232,8 +233,6 @@ export function ScheduledTaskDetailModal({ taskId, open, onClose, onUpdated }: S
   };
 
   const handleDelete = async () => {
-    if (!confirm('Are you sure you want to delete this scheduled task?')) return;
-
     setDeleting(true);
     try {
       await deleteScheduledTask(taskId);
@@ -243,6 +242,7 @@ export function ScheduledTaskDetailModal({ taskId, open, onClose, onUpdated }: S
       setError(err instanceof Error ? err.message : 'Failed to delete task');
     } finally {
       setDeleting(false);
+      setConfirmingDelete(false);
     }
   };
 
@@ -703,13 +703,28 @@ export function ScheduledTaskDetailModal({ taskId, open, onClose, onUpdated }: S
 
       {/* Footer actions */}
       <div className="flex-shrink-0 px-4 py-3 border-t border-gray-200 dark:border-gray-700 flex justify-between">
-        <Button
-          variant="danger"
-          onClick={handleDelete}
-          disabled={deleting}
-        >
-          {deleting ? <Spinner className="h-4 w-4" /> : 'Delete Task'}
-        </Button>
+        {confirmingDelete ? (
+          <div className="flex items-center gap-2">
+            <span className="text-sm text-red-600 dark:text-red-400">Delete this task?</span>
+            <Button
+              variant="danger"
+              onClick={handleDelete}
+              disabled={deleting}
+            >
+              {deleting ? <Spinner className="h-4 w-4" /> : 'Yes, Delete'}
+            </Button>
+            <Button variant="secondary" onClick={() => setConfirmingDelete(false)} disabled={deleting}>
+              Cancel
+            </Button>
+          </div>
+        ) : (
+          <Button
+            variant="danger"
+            onClick={() => setConfirmingDelete(true)}
+          >
+            Delete Task
+          </Button>
+        )}
         <Button variant="secondary" onClick={onClose}>
           Close
         </Button>

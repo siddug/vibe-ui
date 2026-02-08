@@ -7,17 +7,23 @@ import {
   createScheduledTask,
   fetchFromServer,
   getSkillsConfig,
+  getPersonalities,
+  getProjects,
+  createPersonality,
+  createProject,
   type Connector,
   type ApprovalMode,
   type AgentMode,
   type ImageData,
   type HealthResponse,
   type ScheduleType,
+  type Personality,
+  type Project,
 } from '@/lib/api';
 import { WorkDirSelector } from '@/components/chat/WorkDirSelector';
 import { ConnectorSelector } from '@/components/chat/ConnectorSelector';
 import { ChatInput } from '@/components/chat/ChatInput';
-import { Button, Input, Spinner } from '@/components/ui';
+import { Button, Input, Spinner, Dialog, Dropdown } from '@/components/ui';
 import { useServer } from '@/contexts/ServerContext';
 import { parseConfigString } from '@/lib/servers';
 
@@ -67,6 +73,24 @@ export function SessionCreateForm({
   const [runAt, setRunAt] = useState('');
   const [timezone, setTimezone] = useState('UTC');
   const [inheritContext, setInheritContext] = useState(false);
+
+  // Personality & Project state
+  const [personalities, setPersonalities] = useState<Personality[]>([]);
+  const [projects, setProjects] = useState<Project[]>([]);
+  const [personalityId, setPersonalityId] = useState('');
+  const [projectId, setProjectId] = useState('');
+
+  // Inline creation dialogs
+  const [showNewPersonality, setShowNewPersonality] = useState(false);
+  const [newPName, setNewPName] = useState('');
+  const [newPReadableId, setNewPReadableId] = useState('');
+  const [newPInstructions, setNewPInstructions] = useState('');
+  const [newPSaving, setNewPSaving] = useState(false);
+
+  const [showNewProject, setShowNewProject] = useState(false);
+  const [newPrName, setNewPrName] = useState('');
+  const [newPrSlug, setNewPrSlug] = useState('');
+  const [newPrSaving, setNewPrSaving] = useState(false);
 
   // Advanced options state
   const [showAdvanced, setShowAdvanced] = useState(false);
@@ -126,7 +150,8 @@ export function SessionCreateForm({
       // Set default connector
       const available = connectorsRes.connectors.filter((c) => c.status === 'available');
       if (available.length > 0 && !connector) {
-        setConnector(available[0].name);
+        const claude = available.find((c) => c.name === 'claude');
+        setConnector(claude ? claude.name : available[0].name);
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to fetch connectors');
@@ -147,14 +172,72 @@ export function SessionCreateForm({
     }
   }, []);
 
+  const fetchPersonalitiesAndProjects = useCallback(async () => {
+    try {
+      const [personalitiesRes, projectsRes] = await Promise.all([
+        getPersonalities({ limit: 100 }),
+        getProjects({ status: 'active', limit: 100 }),
+      ]);
+      setPersonalities(personalitiesRes.personalities);
+      setProjects(projectsRes.projects);
+    } catch {
+      // Non-critical - personalities/projects are optional
+    }
+  }, []);
+
   useEffect(() => {
     if (servers.length > 0) {
       fetchConnectors();
       fetchSkillsConfig();
+      fetchPersonalitiesAndProjects();
     } else {
       setLoading(false);
     }
-  }, [fetchConnectors, fetchSkillsConfig, servers.length]);
+  }, [fetchConnectors, fetchSkillsConfig, fetchPersonalitiesAndProjects, servers.length]);
+
+  const nameToSlug = (name: string) => name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+
+  const handleCreateNewPersonality = async () => {
+    if (!newPName.trim() || !newPReadableId.trim() || !newPInstructions.trim()) return;
+    setNewPSaving(true);
+    try {
+      const created = await createPersonality({
+        name: newPName.trim(),
+        readableId: newPReadableId.trim(),
+        instructions: newPInstructions.trim(),
+      });
+      await fetchPersonalitiesAndProjects();
+      setPersonalityId(created.id);
+      setShowNewPersonality(false);
+      setNewPName('');
+      setNewPReadableId('');
+      setNewPInstructions('');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to create personality');
+    } finally {
+      setNewPSaving(false);
+    }
+  };
+
+  const handleCreateNewProject = async () => {
+    if (!newPrName.trim() || !newPrSlug.trim()) return;
+    setNewPrSaving(true);
+    try {
+      const created = await createProject({
+        name: newPrName.trim(),
+        projectSlug: newPrSlug.trim(),
+      });
+      await fetchPersonalitiesAndProjects();
+      setProjectId(created.id);
+      setShowNewProject(false);
+      setNewPrName('');
+      setNewPrSlug('');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to create project');
+    } finally {
+      setNewPrSaving(false);
+    }
+  };
 
   const handleSubmit = async (startImmediately: boolean = true) => {
     if (!connector || !workDir || (!prompt.trim() && images.length === 0)) {
@@ -179,6 +262,8 @@ export function SessionCreateForm({
         agentMode,
         images: images.length > 0 ? images : undefined,
         skillsDirectory: skillsDirectory.trim() || undefined,
+        personalityId: personalityId || undefined,
+        projectId: projectId || undefined,
       });
       // Reset form state before calling callback to ensure clean dismissal
       setSubmitting(false);
@@ -222,6 +307,8 @@ export function SessionCreateForm({
         inheritContext,
         agentMode,
         approvalMode,
+        personalityId: personalityId || undefined,
+        projectId: projectId || undefined,
       });
       // Reset form state
       setSubmittingSchedule(false);
@@ -411,6 +498,54 @@ export function SessionCreateForm({
                 Read-only analysis mode
               </div>
             </button>
+          </div>
+        </div>
+
+        {/* Personality & Project Selectors */}
+        <div className="grid grid-cols-2 gap-4">
+          <div>
+            <label className="block text-sm font-medium mb-2">Personality</label>
+            <div className="flex gap-2">
+              <Dropdown
+                value={personalityId}
+                onChange={setPersonalityId}
+                options={[
+                  { value: '', label: 'None' },
+                  ...personalities.map((p) => ({ value: p.id, label: `${p.name} (${p.readableId})` })),
+                ]}
+                placeholder="Select personality..."
+                className="flex-1"
+              />
+              <button
+                type="button"
+                onClick={() => setShowNewPersonality(true)}
+                className="px-2 py-1 text-sm text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded-lg transition-colors whitespace-nowrap"
+              >
+                + New
+              </button>
+            </div>
+          </div>
+          <div>
+            <label className="block text-sm font-medium mb-2">Project</label>
+            <div className="flex gap-2">
+              <Dropdown
+                value={projectId}
+                onChange={setProjectId}
+                options={[
+                  { value: '', label: 'None' },
+                  ...projects.map((p) => ({ value: p.id, label: p.name })),
+                ]}
+                placeholder="Select project..."
+                className="flex-1"
+              />
+              <button
+                type="button"
+                onClick={() => setShowNewProject(true)}
+                className="px-2 py-1 text-sm text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded-lg transition-colors whitespace-nowrap"
+              >
+                + New
+              </button>
+            </div>
           </div>
         </div>
 
@@ -643,6 +778,90 @@ export function SessionCreateForm({
           </div>
         </div>
       )}
+
+      {/* New Personality Dialog */}
+      <Dialog open={showNewPersonality} onClose={() => setShowNewPersonality(false)} title="Create Personality">
+        <div className="p-4 space-y-3">
+          <div className="grid grid-cols-2 gap-2">
+            <div>
+              <label className="block text-sm font-medium mb-1">Name</label>
+              <Input
+                value={newPName}
+                onChange={(e) => {
+                  setNewPName(e.target.value);
+                  if (!newPReadableId || newPReadableId === `@${nameToSlug(newPName)}`) {
+                    setNewPReadableId(`@${nameToSlug(e.target.value)}`);
+                  }
+                }}
+                placeholder="e.g. Mark"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium mb-1">@ID</label>
+              <Input
+                value={newPReadableId}
+                onChange={(e) => setNewPReadableId(e.target.value)}
+                placeholder="@mark"
+                className="font-mono"
+              />
+            </div>
+          </div>
+          <div>
+            <label className="block text-sm font-medium mb-1">Instructions</label>
+            <textarea
+              value={newPInstructions}
+              onChange={(e) => setNewPInstructions(e.target.value)}
+              placeholder="Define who this agent is, its expertise, behavior..."
+              className="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 min-h-[80px]"
+            />
+          </div>
+          <div className="flex justify-end gap-2">
+            <Button variant="ghost" onClick={() => setShowNewPersonality(false)}>Cancel</Button>
+            <Button onClick={handleCreateNewPersonality} disabled={newPSaving || !newPName.trim() || !newPReadableId.trim() || !newPInstructions.trim()}>
+              {newPSaving ? <Spinner className="h-4 w-4" /> : 'Create'}
+            </Button>
+          </div>
+        </div>
+      </Dialog>
+
+      {/* New Project Dialog */}
+      <Dialog open={showNewProject} onClose={() => setShowNewProject(false)} title="Create Project">
+        <div className="p-4 space-y-3">
+          <div className="grid grid-cols-2 gap-2">
+            <div>
+              <label className="block text-sm font-medium mb-1">Name</label>
+              <Input
+                value={newPrName}
+                onChange={(e) => {
+                  setNewPrName(e.target.value);
+                  if (!newPrSlug || newPrSlug === nameToSlug(newPrName)) {
+                    setNewPrSlug(nameToSlug(e.target.value));
+                  }
+                }}
+                placeholder="Project name"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium mb-1">Slug</label>
+              <Input
+                value={newPrSlug}
+                onChange={(e) => setNewPrSlug(e.target.value)}
+                placeholder="project-slug"
+                className="font-mono"
+              />
+            </div>
+          </div>
+          <p className="text-xs text-gray-500">
+            Workspace: ~/.vibe-server/projects/{newPrSlug || 'slug'}/
+          </p>
+          <div className="flex justify-end gap-2">
+            <Button variant="ghost" onClick={() => setShowNewProject(false)}>Cancel</Button>
+            <Button onClick={handleCreateNewProject} disabled={newPrSaving || !newPrName.trim() || !newPrSlug.trim()}>
+              {newPrSaving ? <Spinner className="h-4 w-4" /> : 'Create'}
+            </Button>
+          </div>
+        </div>
+      </Dialog>
     </div>
   );
 }

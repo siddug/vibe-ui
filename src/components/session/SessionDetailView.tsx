@@ -10,6 +10,9 @@ import {
   updateSessionMode,
   updateSession,
   updateSessionStatus,
+  getPersonalities,
+  getProjectMessages,
+  postProjectMessage,
   type Session,
   type ExecutionProcess,
   type ProcessLog,
@@ -17,6 +20,8 @@ import {
   type ApprovalMode,
   type SessionStatus,
   type ImageData,
+  type Personality,
+  type TeamMessage,
 } from '@/lib/api';
 import { useLogStream, type LogMessage } from '@/hooks/useLogStream';
 import { useApprovalStream } from '@/hooks/useApprovalStream';
@@ -37,7 +42,7 @@ import {
 import { FileExplorer } from '@/components/chat/FileExplorer';
 import { GitExplorer } from '@/components/chat/GitExplorer';
 
-type SessionTab = 'agent' | 'files' | 'git';
+type SessionTab = 'agent' | 'files' | 'git' | 'workspace' | 'messages';
 
 interface ConversationTurn {
   process: ExecutionProcess;
@@ -429,6 +434,16 @@ export function SessionDetailView({
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" />
               </svg>
               <span className="font-mono truncate">{session.workDir}</span>
+              {session.personality && (
+                <span className="ml-2 text-orange-600 dark:text-orange-400 font-medium">
+                  {session.personality.readableId}
+                </span>
+              )}
+              {session.project && (
+                <span className="ml-2 text-indigo-600 dark:text-indigo-400 font-medium">
+                  {session.project.name}
+                </span>
+              )}
             </div>
             <span className="font-mono text-gray-400 ml-4" title={`Session ID: ${session.id}`}>
               {session.id.slice(0, 8)}
@@ -443,19 +458,28 @@ export function SessionDetailView({
       <div className="flex-shrink-0 border-b border-[var(--card-border)] bg-[var(--card-bg)]">
         <div className={`${maxWidthClass} mx-auto px-4`}>
           <div className="flex gap-0">
-            {(['agent', 'files', 'git'] as const).map((tab) => (
-              <button
-                key={tab}
-                onClick={() => setActiveTab(tab)}
-                className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors cursor-pointer ${
-                  activeTab === tab
-                    ? 'border-blue-500 text-blue-600 dark:text-blue-400'
-                    : 'border-transparent text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 hover:border-gray-300'
-                }`}
-              >
-                {tab === 'agent' ? 'Agent' : tab === 'files' ? 'Files' : 'Git'}
-              </button>
-            ))}
+            {(['agent', 'files', 'git', ...(session.project ? ['messages' as const, 'workspace' as const] : [])] as const).map((tab) => {
+              const labels: Record<string, string> = {
+                agent: 'Agent',
+                files: 'Files',
+                git: 'Git',
+                messages: 'Messages',
+                workspace: 'Workspace',
+              };
+              return (
+                <button
+                  key={tab}
+                  onClick={() => setActiveTab(tab)}
+                  className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors cursor-pointer ${
+                    activeTab === tab
+                      ? 'border-blue-500 text-blue-600 dark:text-blue-400'
+                      : 'border-transparent text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 hover:border-gray-300'
+                  }`}
+                >
+                  {labels[tab] || tab}
+                </button>
+              );
+            })}
           </div>
         </div>
       </div>
@@ -540,12 +564,26 @@ export function SessionDetailView({
             mode="browse"
           />
         </div>
-      ) : (
+      ) : activeTab === 'git' ? (
         /* Git Tab */
         <div className="flex-1 overflow-hidden flex flex-col">
           <GitExplorer initialPath={session.workDir} />
         </div>
-      )}
+      ) : activeTab === 'messages' && session.project ? (
+        /* Messages Tab */
+        <TeamMessagesTab
+          projectId={session.project.id}
+          currentPersonality={session.personality || undefined}
+        />
+      ) : activeTab === 'workspace' && session.project ? (
+        /* Workspace Tab */
+        <div className="flex-1 overflow-hidden flex flex-col">
+          <FileExplorer
+            initialPath={session.project.workspacePath}
+            mode="browse"
+          />
+        </div>
+      ) : null}
 
       {/* Sticky Input Area - only show on Agent tab */}
       {activeTab === 'agent' && <div className="flex-shrink-0 border-t border-[var(--card-border)] bg-[var(--card-bg)] sticky bottom-0">
@@ -738,6 +776,257 @@ export function SessionDetailView({
       </div>}
     </div>
   );
+}
+
+// ─── Team Messages Tab ──────────────────────────────────────────────────────
+
+function TeamMessagesTab({
+  projectId,
+  currentPersonality,
+}: {
+  projectId: string;
+  currentPersonality?: Personality;
+}) {
+  const [messages, setMessages] = useState<TeamMessage[]>([]);
+  const [personalities, setPersonalities] = useState<Personality[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [sending, setSending] = useState(false);
+  const [messageText, setMessageText] = useState('');
+  const [sender, setSender] = useState(currentPersonality?.readableId || '@owner');
+  const [target, setTarget] = useState('@all');
+  const messagesEndRef = useRef<HTMLDivElement>(null);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  const fetchMessages = useCallback(async () => {
+    try {
+      const [messagesRes, personalitiesRes] = await Promise.all([
+        getProjectMessages(projectId, { days: 30 }),
+        getPersonalities({ limit: 100 }),
+      ]);
+      setMessages(messagesRes.messages);
+      setPersonalities(personalitiesRes.personalities);
+    } catch (err) {
+      console.error('Failed to fetch messages:', err);
+    } finally {
+      setLoading(false);
+    }
+  }, [projectId]);
+
+  useEffect(() => {
+    fetchMessages();
+  }, [fetchMessages]);
+
+  // Auto-scroll on initial load and new messages
+  useEffect(() => {
+    if (messagesEndRef.current) {
+      messagesEndRef.current.scrollIntoView({ behavior: 'smooth' });
+    }
+  }, [messages.length]);
+
+  // Auto-resize textarea
+  useEffect(() => {
+    const textarea = textareaRef.current;
+    if (textarea) {
+      textarea.style.height = 'auto';
+      textarea.style.height = `${Math.min(textarea.scrollHeight, 120)}px`;
+    }
+  }, [messageText]);
+
+  const handleSend = async () => {
+    if (!messageText.trim()) return;
+    setSending(true);
+    try {
+      await postProjectMessage(projectId, {
+        sender,
+        target,
+        content: messageText.trim(),
+      });
+      setMessageText('');
+      await fetchMessages();
+    } catch (err) {
+      console.error('Failed to send message:', err);
+    } finally {
+      setSending(false);
+    }
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      if (!sending && messageText.trim()) {
+        handleSend();
+      }
+    }
+  };
+
+  // Group messages by date
+  const messagesByDate = messages.reduce<Record<string, TeamMessage[]>>((acc, msg) => {
+    if (!acc[msg.date]) acc[msg.date] = [];
+    acc[msg.date].push(msg);
+    return acc;
+  }, {});
+
+  // Sort dates ascending for chronological display
+  const sortedDates = Object.keys(messagesByDate).sort();
+
+  // Build sender options: @owner + all personalities
+  const senderOptions = [
+    '@owner',
+    ...personalities.map(p => p.readableId),
+  ];
+
+  // Build target options: @all + all personalities
+  const targetOptions = [
+    '@all',
+    ...personalities.map(p => p.readableId),
+  ];
+
+  const getAvatarColor = (sender: string) => {
+    const colors = [
+      'bg-blue-500', 'bg-green-500', 'bg-purple-500', 'bg-orange-500',
+      'bg-pink-500', 'bg-teal-500', 'bg-indigo-500', 'bg-rose-500',
+    ];
+    let hash = 0;
+    for (let i = 0; i < sender.length; i++) {
+      hash = sender.charCodeAt(i) + ((hash << 5) - hash);
+    }
+    return colors[Math.abs(hash) % colors.length];
+  };
+
+  const getInitial = (sender: string) => {
+    const name = sender.startsWith('@') ? sender.slice(1) : sender;
+    return name.charAt(0).toUpperCase();
+  };
+
+  if (loading) {
+    return (
+      <div className="flex-1 flex items-center justify-center">
+        <Spinner className="h-6 w-6 text-blue-400" />
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex-1 flex flex-col overflow-hidden">
+      {/* Messages stream */}
+      <div className="flex-1 overflow-y-auto px-4 py-4">
+        {messages.length === 0 ? (
+          <div className="flex-1 flex flex-col items-center justify-center text-gray-500 py-16">
+            <svg className="w-12 h-12 mb-3 text-gray-300 dark:text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+            </svg>
+            <p className="text-sm font-medium">No messages yet</p>
+            <p className="text-xs mt-1">Start the conversation by sending a message below.</p>
+          </div>
+        ) : (
+          <div className="space-y-6">
+            {sortedDates.map((date) => (
+              <div key={date}>
+                {/* Date separator */}
+                <div className="flex items-center gap-3 my-4">
+                  <div className="flex-1 h-px bg-gray-200 dark:bg-gray-700" />
+                  <span className="text-xs text-gray-400 font-medium px-2">
+                    {formatMessageDate(date)}
+                  </span>
+                  <div className="flex-1 h-px bg-gray-200 dark:bg-gray-700" />
+                </div>
+
+                {/* Messages for this date */}
+                <div className="space-y-3">
+                  {messagesByDate[date].map((msg, idx) => {
+                    const isCurrentUser = msg.sender === sender || msg.sender === '@owner' || msg.sender === 'user';
+
+                    return (
+                      <div key={`${date}-${idx}`} className="flex gap-3 group">
+                        {/* Avatar */}
+                        <div className={`w-8 h-8 rounded-full flex-shrink-0 flex items-center justify-center text-white text-sm font-medium ${getAvatarColor(msg.sender)}`}>
+                          {getInitial(msg.sender)}
+                        </div>
+
+                        {/* Message content */}
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-baseline gap-2">
+                            <span className={`text-sm font-semibold ${isCurrentUser ? 'text-blue-600 dark:text-blue-400' : 'text-gray-900 dark:text-gray-100'}`}>
+                              {msg.sender}
+                            </span>
+                            <span className="text-xs text-gray-400">
+                              → {msg.target}
+                            </span>
+                            <span className="text-xs text-gray-400">
+                              {msg.timestamp}
+                            </span>
+                          </div>
+                          <div className="mt-1 text-sm text-gray-800 dark:text-gray-200 whitespace-pre-wrap break-words">
+                            {msg.content}
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+        <div ref={messagesEndRef} />
+      </div>
+
+      {/* Composer */}
+      <div className="flex-shrink-0 border-t border-[var(--card-border)] bg-[var(--card-bg)] px-4 py-3">
+        <div className="flex items-center gap-2 mb-2">
+          <Dropdown
+            value={sender}
+            onChange={setSender}
+            options={senderOptions.map(s => ({ value: s, label: s }))}
+            size="sm"
+          />
+          <span className="text-xs text-gray-500">→</span>
+          <Dropdown
+            value={target}
+            onChange={setTarget}
+            options={targetOptions.map(t => ({ value: t, label: t }))}
+            size="sm"
+          />
+        </div>
+        <div className="flex gap-2">
+          <textarea
+            ref={textareaRef}
+            value={messageText}
+            onChange={(e) => setMessageText(e.target.value)}
+            onKeyDown={handleKeyDown}
+            placeholder="Type a message... (Enter to send, Shift+Enter for new line)"
+            rows={1}
+            disabled={sending}
+            className="flex-1 px-3 py-2 text-sm rounded-lg border border-[var(--input-border)] bg-[var(--input-bg)] focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none disabled:opacity-50"
+            style={{ minHeight: '38px', maxHeight: '120px' }}
+          />
+          <Button
+            onClick={handleSend}
+            disabled={sending || !messageText.trim()}
+            size="sm"
+          >
+            {sending ? <Spinner className="w-4 h-4" /> : 'Send'}
+          </Button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function formatMessageDate(dateStr: string): string {
+  const date = new Date(dateStr + 'T00:00:00');
+  const today = new Date();
+  const yesterday = new Date();
+  yesterday.setDate(yesterday.getDate() - 1);
+
+  if (dateStr === today.toISOString().slice(0, 10)) return 'Today';
+  if (dateStr === yesterday.toISOString().slice(0, 10)) return 'Yesterday';
+
+  return date.toLocaleDateString('en-US', {
+    weekday: 'short',
+    month: 'short',
+    day: 'numeric',
+  });
 }
 
 // Inline Approval Card Component

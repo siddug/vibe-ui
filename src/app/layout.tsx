@@ -8,7 +8,7 @@ import { AppShell } from "@/components/layout/AppShell";
 
 export const metadata: Metadata = {
   title: "VibeX",
-  description: "AI Agent Session Manager",
+  description: "Manage multiple agents",
   icons: {
     icon: [
       { url: "/logo-32.png", sizes: "32x32", type: "image/png" },

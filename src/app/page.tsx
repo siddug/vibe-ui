@@ -15,7 +15,7 @@ export default function HomePage() {
           <div className="text-center">
             <img src="/logo-128.png" alt="VibeX" className="w-16 h-16 mx-auto mb-3" />
             <h1 className="text-3xl font-bold mb-2">VibeX</h1>
-            <p className="text-gray-500">AI Agent Session Manager</p>
+            <p className="text-gray-500">Manage multiple agents</p>
           </div>
 
           {/* Session Create Form */}

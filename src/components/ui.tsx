@@ -337,7 +337,7 @@ export function Dropdown({ value, onChange, options, className = '', disabled = 
 
         <ListboxOptions
           anchor="bottom"
-          className={`absolute z-50 mt-1 max-h-60 min-w-[120px] w-max overflow-auto rounded-md bg-[var(--card-bg)] py-1 ${size === 'sm' ? 'text-xs' : 'text-sm'} shadow-lg ring-1 ring-black/5 focus:outline-none`}
+          className={`absolute z-50 mt-1 max-h-60 min-w-[var(--button-width)] overflow-auto rounded-md bg-[var(--card-bg)] py-1 ${size === 'sm' ? 'text-xs' : 'text-sm'} shadow-lg ring-1 ring-black/5 focus:outline-none`}
         >
           {options.map((option) => (
             <ListboxOption

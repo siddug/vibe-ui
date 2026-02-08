@@ -8,8 +8,17 @@ import {
   getSkillsConfig,
   updateSkillsConfig,
   getSkillsStatus,
+  getPersonalities,
+  createPersonality,
+  updatePersonality,
+  deletePersonality,
+  getProjects,
+  createProject,
+  deleteProject,
   type ApiKey,
   type SkillsStatus,
+  type Personality,
+  type Project,
 } from '@/lib/api';
 import { Button, Input, Card, CardHeader, CardContent, Spinner, Dropdown, Dialog } from '@/components/ui';
 import { useServer } from '@/contexts/ServerContext';
@@ -41,6 +50,25 @@ export function SettingsContent() {
   const [skillsLoading, setSkillsLoading] = useState(true);
   const [skillsSaving, setSkillsSaving] = useState(false);
   const [showSkillsPicker, setShowSkillsPicker] = useState(false);
+
+  // Personalities state
+  const [personalities, setPersonalities] = useState<Personality[]>([]);
+  const [personalitiesLoading, setPersonalitiesLoading] = useState(true);
+  const [newPersonalityName, setNewPersonalityName] = useState('');
+  const [newPersonalityReadableId, setNewPersonalityReadableId] = useState('');
+  const [newPersonalityInstructions, setNewPersonalityInstructions] = useState('');
+  const [personalitySaving, setPersonalitySaving] = useState(false);
+  const [editingPersonalityId, setEditingPersonalityId] = useState<string | null>(null);
+  const [editPersonalityName, setEditPersonalityName] = useState('');
+  const [editPersonalityReadableId, setEditPersonalityReadableId] = useState('');
+  const [editPersonalityInstructions, setEditPersonalityInstructions] = useState('');
+
+  // Projects state
+  const [projects, setProjects] = useState<Project[]>([]);
+  const [projectsLoading, setProjectsLoading] = useState(true);
+  const [newProjectName, setNewProjectName] = useState('');
+  const [newProjectSlug, setNewProjectSlug] = useState('');
+  const [projectSaving, setProjectSaving] = useState(false);
 
   const fetchApiKeys = useCallback(async () => {
     try {
@@ -75,10 +103,34 @@ export function SettingsContent() {
     }
   }, []);
 
+  const fetchPersonalities = useCallback(async () => {
+    try {
+      const data = await getPersonalities({ limit: 100 });
+      setPersonalities(data.personalities);
+    } catch {
+      // Non-critical
+    } finally {
+      setPersonalitiesLoading(false);
+    }
+  }, []);
+
+  const fetchProjects = useCallback(async () => {
+    try {
+      const data = await getProjects({ limit: 100 });
+      setProjects(data.projects);
+    } catch {
+      // Non-critical
+    } finally {
+      setProjectsLoading(false);
+    }
+  }, []);
+
   useEffect(() => {
     fetchApiKeys();
     fetchSkillsConfig();
-  }, [fetchApiKeys, fetchSkillsConfig]);
+    fetchPersonalities();
+    fetchProjects();
+  }, [fetchApiKeys, fetchSkillsConfig, fetchPersonalities, fetchProjects]);
 
   const handleSaveKey = async () => {
     if (!apiKeyInput.trim()) {
@@ -125,6 +177,105 @@ export function SettingsContent() {
       setError(err instanceof Error ? err.message : 'Failed to save skills directory');
     } finally {
       setSkillsSaving(false);
+    }
+  };
+
+  // Personality handlers
+  const handleCreatePersonality = async () => {
+    if (!newPersonalityName.trim() || !newPersonalityReadableId.trim() || !newPersonalityInstructions.trim()) {
+      setError('Please fill in all personality fields');
+      return;
+    }
+    setPersonalitySaving(true);
+    setError(null);
+    try {
+      await createPersonality({
+        name: newPersonalityName.trim(),
+        readableId: newPersonalityReadableId.trim(),
+        instructions: newPersonalityInstructions.trim(),
+      });
+      setNewPersonalityName('');
+      setNewPersonalityReadableId('');
+      setNewPersonalityInstructions('');
+      fetchPersonalities();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to create personality');
+    } finally {
+      setPersonalitySaving(false);
+    }
+  };
+
+  const handleUpdatePersonality = async (id: string) => {
+    if (!editPersonalityName.trim() || !editPersonalityReadableId.trim() || !editPersonalityInstructions.trim()) {
+      setError('Please fill in all personality fields');
+      return;
+    }
+    setPersonalitySaving(true);
+    setError(null);
+    try {
+      await updatePersonality(id, {
+        name: editPersonalityName.trim(),
+        readableId: editPersonalityReadableId.trim(),
+        instructions: editPersonalityInstructions.trim(),
+      });
+      setEditingPersonalityId(null);
+      fetchPersonalities();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to update personality');
+    } finally {
+      setPersonalitySaving(false);
+    }
+  };
+
+  const handleDeletePersonality = async (id: string, name: string) => {
+    if (!confirm(`Delete personality "${name}"? This cannot be undone.`)) return;
+    try {
+      await deletePersonality(id);
+      fetchPersonalities();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to delete personality');
+    }
+  };
+
+  const startEditPersonality = (p: Personality) => {
+    setEditingPersonalityId(p.id);
+    setEditPersonalityName(p.name);
+    setEditPersonalityReadableId(p.readableId);
+    setEditPersonalityInstructions(p.instructions);
+  };
+
+  // Project handlers
+  const nameToSlug = (name: string) => name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+
+  const handleCreateProject = async () => {
+    if (!newProjectName.trim() || !newProjectSlug.trim()) {
+      setError('Please fill in all project fields');
+      return;
+    }
+    setProjectSaving(true);
+    setError(null);
+    try {
+      await createProject({
+        name: newProjectName.trim(),
+        projectSlug: newProjectSlug.trim(),
+      });
+      setNewProjectName('');
+      setNewProjectSlug('');
+      fetchProjects();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to create project');
+    } finally {
+      setProjectSaving(false);
+    }
+  };
+
+  const handleDeleteProject = async (id: string, name: string) => {
+    if (!confirm(`Archive project "${name}"? Sessions will be preserved.`)) return;
+    try {
+      await deleteProject(id);
+      fetchProjects();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to archive project');
     }
   };
 
@@ -421,6 +572,191 @@ export function SettingsContent() {
           onCancel={() => setShowSkillsPicker(false)}
         />
       </Dialog>
+
+      {/* Personalities Section */}
+      <Card>
+        <CardHeader>
+          <h2 className="text-lg font-semibold">Personalities</h2>
+          <p className="text-sm text-gray-500 mt-1">
+            Agent personalities define identity, @readable-id, and soul instructions that get injected into the agent&apos;s prompt.
+          </p>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {personalitiesLoading ? (
+            <div className="flex items-center justify-center py-4">
+              <Spinner className="h-5 w-5 text-gray-400" />
+            </div>
+          ) : personalities.length > 0 ? (
+            <div className="space-y-2">
+              {personalities.map((p) => (
+                editingPersonalityId === p.id ? (
+                  // Edit mode
+                  <div key={p.id} className="p-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg border border-blue-200 dark:border-blue-800 space-y-2">
+                    <div className="grid grid-cols-2 gap-2">
+                      <Input
+                        value={editPersonalityName}
+                        onChange={(e) => setEditPersonalityName(e.target.value)}
+                        placeholder="Name (e.g. Mark)"
+                        className="h-9"
+                      />
+                      <Input
+                        value={editPersonalityReadableId}
+                        onChange={(e) => setEditPersonalityReadableId(e.target.value)}
+                        placeholder="@readable-id"
+                        className="h-9 font-mono"
+                      />
+                    </div>
+                    <textarea
+                      value={editPersonalityInstructions}
+                      onChange={(e) => setEditPersonalityInstructions(e.target.value)}
+                      placeholder="Soul instructions..."
+                      className="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 min-h-[80px]"
+                    />
+                    <div className="flex justify-end gap-2">
+                      <Button variant="ghost" size="sm" onClick={() => setEditingPersonalityId(null)}>Cancel</Button>
+                      <Button size="sm" onClick={() => handleUpdatePersonality(p.id)} disabled={personalitySaving}>
+                        {personalitySaving ? <Spinner className="h-3 w-3" /> : 'Save'}
+                      </Button>
+                    </div>
+                  </div>
+                ) : (
+                  // Display mode
+                  <div key={p.id} className="flex items-start justify-between p-3 bg-gray-50 dark:bg-gray-800 rounded-lg">
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2">
+                        <span className="font-medium">{p.name}</span>
+                        <span className="text-sm text-orange-600 dark:text-orange-400 font-mono">{p.readableId}</span>
+                      </div>
+                      <p className="text-sm text-gray-500 mt-1 line-clamp-2">{p.instructions}</p>
+                    </div>
+                    <div className="flex items-center gap-1 ml-3 shrink-0">
+                      <Button variant="ghost" size="sm" onClick={() => startEditPersonality(p)}>Edit</Button>
+                      <Button variant="danger" size="sm" onClick={() => handleDeletePersonality(p.id, p.name)}>Delete</Button>
+                    </div>
+                  </div>
+                )
+              ))}
+            </div>
+          ) : (
+            <div className="text-center text-gray-500 text-sm py-4">
+              No personalities created yet
+            </div>
+          )}
+
+          {/* Add New Personality */}
+          <div className="pt-4 border-t border-[var(--card-border)] space-y-3">
+            <h3 className="text-sm font-medium text-gray-500">Add New Personality</h3>
+            <div className="grid grid-cols-2 gap-2">
+              <Input
+                value={newPersonalityName}
+                onChange={(e) => {
+                  setNewPersonalityName(e.target.value);
+                  if (!newPersonalityReadableId || newPersonalityReadableId === `@${nameToSlug(newPersonalityName)}`) {
+                    setNewPersonalityReadableId(`@${nameToSlug(e.target.value)}`);
+                  }
+                }}
+                placeholder="Name (e.g. Mark)"
+                className="h-10"
+              />
+              <Input
+                value={newPersonalityReadableId}
+                onChange={(e) => setNewPersonalityReadableId(e.target.value)}
+                placeholder="@readable-id"
+                className="h-10 font-mono"
+              />
+            </div>
+            <textarea
+              value={newPersonalityInstructions}
+              onChange={(e) => setNewPersonalityInstructions(e.target.value)}
+              placeholder="Soul instructions — define who this agent is, how it should behave, its expertise..."
+              className="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 min-h-[80px]"
+            />
+            <div className="flex justify-end">
+              <Button onClick={handleCreatePersonality} disabled={personalitySaving || !newPersonalityName.trim() || !newPersonalityReadableId.trim() || !newPersonalityInstructions.trim()}>
+                {personalitySaving ? <Spinner className="h-4 w-4" /> : 'Create Personality'}
+              </Button>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Projects Section */}
+      <Card>
+        <CardHeader>
+          <h2 className="text-lg font-semibold">Projects</h2>
+          <p className="text-sm text-gray-500 mt-1">
+            Shared project workspaces where multiple agents can collaborate. Each project gets a folder at ~/.vibe-server/projects/.
+          </p>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {projectsLoading ? (
+            <div className="flex items-center justify-center py-4">
+              <Spinner className="h-5 w-5 text-gray-400" />
+            </div>
+          ) : projects.length > 0 ? (
+            <div className="space-y-2">
+              {projects.map((p) => (
+                <div key={p.id} className="flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-800 rounded-lg">
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2">
+                      <span className="font-medium">{p.name}</span>
+                      <span className={`text-xs px-2 py-0.5 rounded-full ${
+                        p.status === 'active'
+                          ? 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400'
+                          : 'bg-gray-100 dark:bg-gray-700 text-gray-500'
+                      }`}>
+                        {p.status}
+                      </span>
+                    </div>
+                    <div className="text-sm text-gray-500 font-mono truncate mt-0.5">{p.workspacePath}</div>
+                  </div>
+                  <div className="flex items-center gap-1 ml-3 shrink-0">
+                    <Button variant="danger" size="sm" onClick={() => handleDeleteProject(p.id, p.name)}>
+                      Archive
+                    </Button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="text-center text-gray-500 text-sm py-4">
+              No projects created yet
+            </div>
+          )}
+
+          {/* Add New Project */}
+          <div className="pt-4 border-t border-[var(--card-border)] space-y-3">
+            <h3 className="text-sm font-medium text-gray-500">Add New Project</h3>
+            <div className="grid grid-cols-2 gap-2">
+              <Input
+                value={newProjectName}
+                onChange={(e) => {
+                  setNewProjectName(e.target.value);
+                  if (!newProjectSlug || newProjectSlug === nameToSlug(newProjectName)) {
+                    setNewProjectSlug(nameToSlug(e.target.value));
+                  }
+                }}
+                placeholder="Project name"
+                className="h-10"
+              />
+              <Input
+                value={newProjectSlug}
+                onChange={(e) => setNewProjectSlug(e.target.value)}
+                placeholder="project-slug"
+                className="h-10 font-mono"
+              />
+            </div>
+            <p className="text-xs text-gray-500">
+              Workspace will be created at: ~/.vibe-server/projects/{newProjectSlug || 'project-slug'}/
+            </p>
+            <div className="flex justify-end">
+              <Button onClick={handleCreateProject} disabled={projectSaving || !newProjectName.trim() || !newProjectSlug.trim()}>
+                {projectSaving ? <Spinner className="h-4 w-4" /> : 'Create Project'}
+              </Button>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
     </div>
   );
 }

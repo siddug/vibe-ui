@@ -62,6 +62,11 @@ export interface Session {
   approvalMode: ApprovalMode; // 'manual' requires user approval, 'auto' auto-approves
   agentMode: AgentMode; // 'default' for normal operation, 'plan' for read-only planning
   agentSessionId?: string | null; // Agent's own session ID (e.g., Claude's UUID)
+  personalityId?: string | null;
+  projectId?: string | null;
+  // Populated on GET /sessions/:id
+  personality?: Personality | null;
+  project?: Project | null;
   createdAt: string;
   updatedAt: string;
   isActive?: boolean;
@@ -140,6 +145,8 @@ export interface CreateSessionRequest {
   startImmediately?: boolean;
   images?: ImageData[];
   skillsDirectory?: string;
+  personalityId?: string;
+  projectId?: string;
 }
 
 export interface CreateSessionResponse {
@@ -225,6 +232,8 @@ export interface ScheduledTask {
   agentMode: AgentMode;
   approvalMode: ApprovalMode;
   env: string | null;
+  personalityId: string | null;
+  projectId: string | null;
   enabled: boolean;
   executionCount: number;
   lastRunAt: string | null;
@@ -259,6 +268,8 @@ export interface CreateScheduledTaskRequest {
   agentMode?: AgentMode;
   approvalMode?: ApprovalMode;
   env?: Record<string, string>;
+  personalityId?: string;
+  projectId?: string;
 }
 
 export interface UpdateScheduledTaskRequest {
@@ -275,6 +286,8 @@ export interface UpdateScheduledTaskRequest {
   approvalMode?: ApprovalMode;
   env?: Record<string, string>;
   enabled?: boolean;
+  personalityId?: string | null;
+  projectId?: string | null;
 }
 
 export interface ScheduledTaskHistoryResponse {
@@ -311,6 +324,77 @@ export interface ApiKeysResponse {
 export interface SaveApiKeyRequest {
   provider: string;
   apiKey: string;
+}
+
+// Personality types
+export interface Personality {
+  id: string;
+  name: string;
+  readableId: string; // e.g. "@mark"
+  instructions: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface PersonalitiesResponse {
+  personalities: Personality[];
+  total: number;
+  limit: number;
+  offset: number;
+  hasMore: boolean;
+}
+
+export interface CreatePersonalityRequest {
+  name: string;
+  readableId: string;
+  instructions: string;
+}
+
+export interface UpdatePersonalityRequest {
+  name?: string;
+  readableId?: string;
+  instructions?: string;
+}
+
+// Project types
+export type ProjectStatus = 'active' | 'archived';
+
+export interface Project {
+  id: string;
+  name: string;
+  projectSlug: string;
+  workspacePath: string;
+  status: ProjectStatus;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ProjectWithDetails extends Project {
+  sessionCount: number;
+  agents: {
+    personalityId: string | null;
+    name: string;
+    readableId: string | null;
+    sessionCount: number;
+  }[];
+}
+
+export interface ProjectsResponse {
+  projects: Project[];
+  total: number;
+  limit: number;
+  offset: number;
+  hasMore: boolean;
+}
+
+export interface CreateProjectRequest {
+  name: string;
+  projectSlug: string;
+}
+
+export interface UpdateProjectRequest {
+  name?: string;
+  status?: ProjectStatus;
 }
 
 // API Functions
@@ -559,6 +643,16 @@ export async function listDirectory(
   const params = new URLSearchParams({ path });
   if (showHidden) params.set('showHidden', 'true');
   return fetchApi(`/api/filesystem/list?${params.toString()}`);
+}
+
+export interface ReadFileResponse {
+  path: string;
+  content: string;
+}
+
+export async function readFile(path: string): Promise<ReadFileResponse> {
+  const params = new URLSearchParams({ path });
+  return fetchApi(`/api/filesystem/read?${params.toString()}`);
 }
 
 export async function deleteApiKey(
@@ -827,4 +921,142 @@ export async function updateSkillsConfig(
  */
 export async function getSkillsStatus(): Promise<SkillsStatus> {
   return fetchApi('/api/settings/skills/status');
+}
+
+// Personalities API
+
+export async function getPersonalities(params?: { limit?: number; offset?: number }): Promise<PersonalitiesResponse> {
+  const searchParams = new URLSearchParams();
+  if (params?.limit) searchParams.set('limit', String(params.limit));
+  if (params?.offset) searchParams.set('offset', String(params.offset));
+  const query = searchParams.toString();
+  return fetchApi(`/api/personalities${query ? `?${query}` : ''}`);
+}
+
+export async function getPersonality(id: string): Promise<Personality> {
+  return fetchApi(`/api/personalities/${id}`);
+}
+
+export async function createPersonality(data: CreatePersonalityRequest): Promise<Personality> {
+  return fetchApi('/api/personalities', {
+    method: 'POST',
+    body: JSON.stringify(data),
+  });
+}
+
+export async function updatePersonality(id: string, data: UpdatePersonalityRequest): Promise<Personality> {
+  return fetchApi(`/api/personalities/${id}`, {
+    method: 'PUT',
+    body: JSON.stringify(data),
+  });
+}
+
+export async function deletePersonality(id: string): Promise<void> {
+  const url = `${getApiBase()}/api/personalities/${id}`;
+  const headers: Record<string, string> = {};
+  const authKey = getAuthKey();
+  if (authKey) {
+    headers['Authorization'] = `Bearer ${authKey}`;
+  }
+  const response = await fetch(url, { method: 'DELETE', headers });
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({ message: response.statusText }));
+    throw new Error(error.message || `API error: ${response.status}`);
+  }
+}
+
+// Projects API
+
+export async function getProjects(params?: { status?: ProjectStatus; limit?: number; offset?: number }): Promise<ProjectsResponse> {
+  const searchParams = new URLSearchParams();
+  if (params?.status) searchParams.set('status', String(params.status));
+  if (params?.limit) searchParams.set('limit', String(params.limit));
+  if (params?.offset) searchParams.set('offset', String(params.offset));
+  const query = searchParams.toString();
+  return fetchApi(`/api/projects${query ? `?${query}` : ''}`);
+}
+
+export async function getProject(id: string): Promise<ProjectWithDetails> {
+  return fetchApi(`/api/projects/${id}`);
+}
+
+export async function createProject(data: CreateProjectRequest): Promise<Project> {
+  return fetchApi('/api/projects', {
+    method: 'POST',
+    body: JSON.stringify(data),
+  });
+}
+
+export async function updateProject(id: string, data: UpdateProjectRequest): Promise<Project> {
+  return fetchApi(`/api/projects/${id}`, {
+    method: 'PUT',
+    body: JSON.stringify(data),
+  });
+}
+
+export async function deleteProject(id: string): Promise<void> {
+  const url = `${getApiBase()}/api/projects/${id}`;
+  const headers: Record<string, string> = {};
+  const authKey = getAuthKey();
+  if (authKey) {
+    headers['Authorization'] = `Bearer ${authKey}`;
+  }
+  const response = await fetch(url, { method: 'DELETE', headers });
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({ message: response.statusText }));
+    throw new Error(error.message || `API error: ${response.status}`);
+  }
+}
+
+export async function getProjectSessions(
+  projectId: string,
+  params?: { limit?: number; offset?: number }
+): Promise<SessionsResponse> {
+  const searchParams = new URLSearchParams();
+  if (params?.limit) searchParams.set('limit', String(params.limit));
+  if (params?.offset) searchParams.set('offset', String(params.offset));
+  const query = searchParams.toString();
+  return fetchApi(`/api/projects/${projectId}/sessions${query ? `?${query}` : ''}`);
+}
+
+// ─── Team Messages ───────────────────────────────────────────────────────────
+
+export interface TeamMessage {
+  sender: string;
+  target: string;
+  timestamp: string;
+  content: string;
+  date: string;
+}
+
+export interface TeamMessagesResponse {
+  messages: TeamMessage[];
+  dates: string[];
+}
+
+export interface PostTeamMessageRequest {
+  sender: string;
+  target: string;
+  content: string;
+}
+
+export async function getProjectMessages(
+  projectId: string,
+  params?: { days?: number }
+): Promise<TeamMessagesResponse> {
+  const searchParams = new URLSearchParams();
+  if (params?.days) searchParams.set('days', String(params.days));
+  const query = searchParams.toString();
+  return fetchApi(`/api/projects/${projectId}/messages${query ? `?${query}` : ''}`);
+}
+
+export async function postProjectMessage(
+  projectId: string,
+  data: PostTeamMessageRequest
+): Promise<TeamMessage> {
+  return fetchApi(`/api/projects/${projectId}/messages`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data),
+  });
 }

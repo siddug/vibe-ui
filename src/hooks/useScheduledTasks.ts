@@ -51,7 +51,7 @@ export function useScheduledTasks(
   const [hasMore, setHasMore] = useState(false);
 
   const fetchTasks = useCallback(async (resetOffset = true) => {
-    setState(prev => ({ ...prev, loading: true, error: null }));
+    setState(prev => ({ ...prev, loading: prev.tasks.length === 0, error: null }));
     try {
       const currentOffset = resetOffset ? 0 : offset;
       const response = await getScheduledTasks({

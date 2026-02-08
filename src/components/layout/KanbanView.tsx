@@ -6,9 +6,13 @@ import { useTheme } from '@/contexts/ThemeContext';
 import { useViewMode } from '@/contexts/ViewModeContext';
 import {
   updateSessionStatus,
+  getPersonalities,
+  getProjects,
   type Session,
   type SessionStatus,
   type ScheduledTask,
+  type Personality,
+  type Project,
 } from '@/lib/api';
 import { usePaginatedSessions } from '@/hooks/usePaginatedSessions';
 import { useScheduledTasks } from '@/hooks/useScheduledTasks';
@@ -52,6 +56,35 @@ export function KanbanView({ initialSessionId, initialCreateOpen }: KanbanViewPr
   const [selectedSessionId, setSelectedSessionId] = useState<string | null>(initialSessionId ?? null);
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
+
+  // Personality & Project lookup maps for card display
+  const [personalityMap, setPersonalityMap] = useState<Record<string, Personality>>({});
+  const [projectMap, setProjectMap] = useState<Record<string, Project>>({});
+  const [projectFilter, setProjectFilter] = useState<string>(''); // '' = all
+  const [projectsList, setProjectsList] = useState<Project[]>([]);
+
+  // Fetch personalities and projects for lookup
+  useEffect(() => {
+    const fetchLookups = async () => {
+      try {
+        const [personalitiesRes, projectsRes] = await Promise.all([
+          getPersonalities({ limit: 100 }),
+          getProjects({ limit: 100 }),
+        ]);
+        const pMap: Record<string, Personality> = {};
+        for (const p of personalitiesRes.personalities) pMap[p.id] = p;
+        setPersonalityMap(pMap);
+
+        const prMap: Record<string, Project> = {};
+        for (const p of projectsRes.projects) prMap[p.id] = p;
+        setProjectMap(prMap);
+        setProjectsList(projectsRes.projects);
+      } catch {
+        // Non-critical
+      }
+    };
+    fetchLookups();
+  }, []);
 
   // Sync state with props on initial mount (for direct URL navigation/reload)
   useEffect(() => {
@@ -215,6 +248,14 @@ export function KanbanView({ initialSessionId, initialCreateOpen }: KanbanViewPr
             <h1 className="text-xl font-semibold">VibeX</h1>
           </div>
           <div className="flex items-center gap-2">
+            {/* Project Filter */}
+            {projectsList.length > 0 && (
+              <ProjectSwitcher
+                projects={projectsList.filter(p => p.status === 'active')}
+                value={projectFilter}
+                onChange={setProjectFilter}
+              />
+            )}
             {/* Server Switcher */}
             <ServerSwitcher />
             {/* Theme Toggle */}
@@ -266,29 +307,37 @@ export function KanbanView({ initialSessionId, initialCreateOpen }: KanbanViewPr
               onCreateClick={openCreateModal}
             />
 
-            {COLUMNS.map((column) => (
-              <KanbanColumn
-                key={column.status}
-                status={column.status}
-                title={column.title}
-                color={column.color}
-                bgColor={column.bgColor}
-                sessions={columns[column.status]?.sessions}
-                hasMore={columns[column.status]?.hasMore}
-                loading={columns[column.status]?.loading}
-                onLoadMore={() => loadMore(column.status)}
-                onDragOver={(e) => handleDragOver(e, column.status)}
-                onDragLeave={handleDragLeave}
-                onDrop={(e) => handleDrop(e, column.status)}
-                isDragOver={dragOverColumn === column.status}
-                onDragStart={handleDragStart}
-                onDragEnd={handleDragEnd}
-                onCardClick={openSession}
-                draggedSessionId={draggedSession?.id ?? null}
-                onCreateClick={openCreateModal}
-                onBulkMove={handleBulkMove}
-              />
-            ))}
+            {COLUMNS.map((column) => {
+              const allSessions = columns[column.status]?.sessions || [];
+              const filteredSessions = projectFilter
+                ? allSessions.filter(s => s.projectId === projectFilter)
+                : allSessions;
+              return (
+                <KanbanColumn
+                  key={column.status}
+                  status={column.status}
+                  title={column.title}
+                  color={column.color}
+                  bgColor={column.bgColor}
+                  sessions={filteredSessions}
+                  hasMore={columns[column.status]?.hasMore}
+                  loading={columns[column.status]?.loading}
+                  onLoadMore={() => loadMore(column.status)}
+                  onDragOver={(e) => handleDragOver(e, column.status)}
+                  onDragLeave={handleDragLeave}
+                  onDrop={(e) => handleDrop(e, column.status)}
+                  isDragOver={dragOverColumn === column.status}
+                  onDragStart={handleDragStart}
+                  onDragEnd={handleDragEnd}
+                  onCardClick={openSession}
+                  draggedSessionId={draggedSession?.id ?? null}
+                  onCreateClick={openCreateModal}
+                  onBulkMove={handleBulkMove}
+                  personalityMap={personalityMap}
+                  projectMap={projectMap}
+                />
+              );
+            })}
           </div>
         )}
       </div>
@@ -349,6 +398,8 @@ interface KanbanColumnProps {
   draggedSessionId: string | null;
   onCreateClick: () => void;
   onBulkMove: (fromStatus: SessionStatus, toStatus: SessionStatus) => void;
+  personalityMap: Record<string, Personality>;
+  projectMap: Record<string, Project>;
 }
 
 function KanbanColumn({
@@ -370,6 +421,8 @@ function KanbanColumn({
   draggedSessionId,
   onCreateClick,
   onBulkMove,
+  personalityMap,
+  projectMap,
 }: KanbanColumnProps) {
   const [menuOpen, setMenuOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
@@ -476,6 +529,8 @@ function KanbanColumn({
             onDragEnd={onDragEnd}
             onClick={() => onCardClick(session.id)}
             isDragging={draggedSessionId === session.id}
+            personality={session.personalityId ? personalityMap[session.personalityId] : undefined}
+            project={session.projectId ? projectMap[session.projectId] : undefined}
           />
         ))}
         {sessions.length === 0 && !loading && (
@@ -608,9 +663,11 @@ interface SessionCardProps {
   onDragEnd: () => void;
   onClick: () => void;
   isDragging: boolean;
+  personality?: Personality;
+  project?: Project;
 }
 
-function SessionCard({ session, onDragStart, onDragEnd, onClick, isDragging }: SessionCardProps) {
+function SessionCard({ session, onDragStart, onDragEnd, onClick, isDragging, personality, project }: SessionCardProps) {
   const displayName = session.sessionName || `Session ${session.id.slice(0, 8)}`;
 
   // Derive some metadata from session for the card display
@@ -679,7 +736,7 @@ function SessionCard({ session, onDragStart, onDragEnd, onClick, isDragging }: S
           <div className='truncate'>{dateDisplay}</div>
         </div>
       </div>
-          {/* Tags */}
+      {/* Tags */}
       <div className="flex flex-wrap gap-1 mb-0">
         <CategoryIcon type={session.connectorType} />
         {session.approvalMode === 'auto' && (
@@ -690,6 +747,16 @@ function SessionCard({ session, onDragStart, onDragEnd, onClick, isDragging }: S
         {session.agentMode === 'plan' && (
           <span className="inline-flex items-center gap-1 px-2 py-0.5 text-xs font-medium rounded-md  text-purple-700 dark:text-purple-400">
             Plan
+          </span>
+        )}
+        {personality && (
+          <span className="inline-flex items-center px-2 py-0.5 text-xs font-medium rounded-md text-orange-700 dark:text-orange-400" title={personality.name}>
+            {personality.readableId}
+          </span>
+        )}
+        {project && (
+          <span className="inline-flex items-center px-2 py-0.5 text-xs font-medium rounded-md text-indigo-700 dark:text-indigo-400" title={`Project: ${project.name}`}>
+            {project.name}
           </span>
         )}
         {/* Loading spinner for in-progress sessions - bottom right */}
@@ -785,6 +852,92 @@ function ScheduledTasksColumn({
           </>
         )}
       </div>
+    </div>
+  );
+}
+
+// Project Switcher - matches ServerSwitcher styling
+interface ProjectSwitcherProps {
+  projects: Project[];
+  value: string;
+  onChange: (value: string) => void;
+}
+
+function ProjectSwitcher({ projects, value, onChange }: ProjectSwitcherProps) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) {
+        setOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  const selectedLabel = value
+    ? projects.find(p => p.id === value)?.name || 'Unknown'
+    : 'All Projects';
+
+  return (
+    <div className="relative" ref={ref}>
+      <button
+        onClick={() => setOpen(!open)}
+        className="w-full flex items-center gap-2 px-3 py-2 rounded-lg border border-[var(--input-border)] hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors text-sm cursor-pointer"
+      >
+        <svg className="w-4 h-4 flex-shrink-0 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" />
+        </svg>
+        <span className="flex-1 truncate text-left font-medium">{selectedLabel}</span>
+        <svg
+          className={`w-4 h-4 flex-shrink-0 transition-transform ${open ? 'rotate-180' : ''}`}
+          fill="none"
+          stroke="currentColor"
+          viewBox="0 0 24 24"
+        >
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+        </svg>
+      </button>
+
+      {open && (
+        <div className="absolute top-full left-0 right-0 mt-1 bg-[var(--card-bg)] border border-[var(--card-border)] rounded-lg shadow-lg z-50 overflow-hidden min-w-[160px]">
+          <button
+            onClick={() => { onChange(''); setOpen(false); }}
+            className={`w-full flex items-center gap-2 px-3 py-2 text-sm text-left transition-colors cursor-pointer ${
+              !value
+                ? 'bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-300'
+                : 'hover:bg-gray-100 dark:hover:bg-gray-700'
+            }`}
+          >
+            <span className="flex-1 truncate">All Projects</span>
+            {!value && (
+              <svg className="w-4 h-4 flex-shrink-0 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+              </svg>
+            )}
+          </button>
+          {projects.map((project) => (
+            <button
+              key={project.id}
+              onClick={() => { onChange(project.id); setOpen(false); }}
+              className={`w-full flex items-center gap-2 px-3 py-2 text-sm text-left transition-colors cursor-pointer ${
+                value === project.id
+                  ? 'bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-300'
+                  : 'hover:bg-gray-100 dark:hover:bg-gray-700'
+              }`}
+            >
+              <span className="flex-1 truncate">{project.name}</span>
+              {value === project.id && (
+                <svg className="w-4 h-4 flex-shrink-0 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                </svg>
+              )}
+            </button>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

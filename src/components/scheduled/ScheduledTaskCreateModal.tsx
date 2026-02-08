@@ -1,16 +1,22 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { Dialog, Button, Input, Spinner } from '@/components/ui';
+import { Dialog, Button, Input, Spinner, Dropdown } from '@/components/ui';
 import {
   createScheduledTask,
   getConnectors,
   listDirectory,
+  getPersonalities,
+  getProjects,
+  createPersonality,
+  createProject,
   type Connector,
   type CreateScheduledTaskRequest,
   type ScheduleType,
   type AgentMode,
   type ApprovalMode,
+  type Personality,
+  type Project,
 } from '@/lib/api';
 
 interface ScheduledTaskCreateModalProps {
@@ -32,19 +38,36 @@ export function ScheduledTaskCreateModal({ open, onClose, onCreated }: Scheduled
   const [inheritContext, setInheritContext] = useState(false);
   const [agentMode, setAgentMode] = useState<AgentMode>('default');
   const [approvalMode, setApprovalMode] = useState<ApprovalMode>('auto');
+  const [personalityId, setPersonalityId] = useState('');
+  const [projectId, setProjectId] = useState('');
+
+  // Inline creation dialogs
+  const [showNewPersonality, setShowNewPersonality] = useState(false);
+  const [newPName, setNewPName] = useState('');
+  const [newPReadableId, setNewPReadableId] = useState('');
+  const [newPInstructions, setNewPInstructions] = useState('');
+  const [newPSaving, setNewPSaving] = useState(false);
+
+  const [showNewProject, setShowNewProject] = useState(false);
+  const [newPrName, setNewPrName] = useState('');
+  const [newPrSlug, setNewPrSlug] = useState('');
+  const [newPrSaving, setNewPrSaving] = useState(false);
 
   // UI state
   const [connectors, setConnectors] = useState<Connector[]>([]);
+  const [personalities, setPersonalities] = useState<Personality[]>([]);
+  const [projectsList, setProjectsList] = useState<Project[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [showDirBrowser, setShowDirBrowser] = useState(false);
   const [dirEntries, setDirEntries] = useState<{ name: string; type: string; path: string }[]>([]);
   const [currentPath, setCurrentPath] = useState('~');
 
-  // Load connectors on mount
+  // Load connectors, personalities, projects on mount
   useEffect(() => {
     if (open) {
       loadConnectors();
+      loadPersonalitiesAndProjects();
     }
   }, [open]);
 
@@ -58,6 +81,63 @@ export function ScheduledTaskCreateModal({ open, onClose, onCreated }: Scheduled
       }
     } catch (err) {
       console.error('Failed to load connectors:', err);
+    }
+  };
+
+  const loadPersonalitiesAndProjects = async () => {
+    try {
+      const [personalitiesRes, projectsRes] = await Promise.all([
+        getPersonalities({ limit: 100 }),
+        getProjects({ status: 'active', limit: 100 }),
+      ]);
+      setPersonalities(personalitiesRes.personalities);
+      setProjectsList(projectsRes.projects);
+    } catch {
+      // Non-critical
+    }
+  };
+
+  const nameToSlug = (name: string) => name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+
+  const handleCreateNewPersonality = async () => {
+    if (!newPName.trim() || !newPReadableId.trim() || !newPInstructions.trim()) return;
+    setNewPSaving(true);
+    try {
+      const created = await createPersonality({
+        name: newPName.trim(),
+        readableId: newPReadableId.trim(),
+        instructions: newPInstructions.trim(),
+      });
+      await loadPersonalitiesAndProjects();
+      setPersonalityId(created.id);
+      setShowNewPersonality(false);
+      setNewPName('');
+      setNewPReadableId('');
+      setNewPInstructions('');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to create personality');
+    } finally {
+      setNewPSaving(false);
+    }
+  };
+
+  const handleCreateNewProject = async () => {
+    if (!newPrName.trim() || !newPrSlug.trim()) return;
+    setNewPrSaving(true);
+    try {
+      const created = await createProject({
+        name: newPrName.trim(),
+        projectSlug: newPrSlug.trim(),
+      });
+      await loadPersonalitiesAndProjects();
+      setProjectId(created.id);
+      setShowNewProject(false);
+      setNewPrName('');
+      setNewPrSlug('');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to create project');
+    } finally {
+      setNewPrSaving(false);
     }
   };
 
@@ -92,6 +172,8 @@ export function ScheduledTaskCreateModal({ open, onClose, onCreated }: Scheduled
         inheritContext,
         agentMode,
         approvalMode,
+        personalityId: personalityId || undefined,
+        projectId: projectId || undefined,
       };
 
       if (scheduleType === 'cron') {
@@ -118,6 +200,8 @@ export function ScheduledTaskCreateModal({ open, onClose, onCreated }: Scheduled
     setInheritContext(false);
     setAgentMode('default');
     setApprovalMode('auto');
+    setPersonalityId('');
+    setProjectId('');
     setError(null);
   };
 
@@ -174,18 +258,12 @@ export function ScheduledTaskCreateModal({ open, onClose, onCreated }: Scheduled
             <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
               Connector *
             </label>
-            <select
+            <Dropdown
               value={connector}
-              onChange={(e) => setConnector(e.target.value)}
-              className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500"
-              required
-            >
-              {connectors.map((c) => (
-                <option key={c.name} value={c.name}>
-                  {c.displayName}
-                </option>
-              ))}
-            </select>
+              onChange={setConnector}
+              options={connectors.map((c) => ({ value: c.name, label: c.displayName }))}
+              placeholder="Select connector..."
+            />
           </div>
 
           <div>
@@ -311,34 +389,86 @@ export function ScheduledTaskCreateModal({ open, onClose, onCreated }: Scheduled
           </label>
         </div>
 
+        {/* Personality & Project */}
+        <div className="grid grid-cols-2 gap-4">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+              Personality
+            </label>
+            <div className="flex gap-2">
+              <Dropdown
+                value={personalityId}
+                onChange={setPersonalityId}
+                options={[
+                  { value: '', label: 'None' },
+                  ...personalities.map((p) => ({ value: p.id, label: `${p.name} (${p.readableId})` })),
+                ]}
+                placeholder="Select personality..."
+                className="flex-1"
+              />
+              <button
+                type="button"
+                onClick={() => setShowNewPersonality(true)}
+                className="px-2 py-1 text-sm text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded-lg transition-colors whitespace-nowrap"
+              >
+                + New
+              </button>
+            </div>
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+              Project
+            </label>
+            <div className="flex gap-2">
+              <Dropdown
+                value={projectId}
+                onChange={setProjectId}
+                options={[
+                  { value: '', label: 'None' },
+                  ...projectsList.map((p) => ({ value: p.id, label: p.name })),
+                ]}
+                placeholder="Select project..."
+                className="flex-1"
+              />
+              <button
+                type="button"
+                onClick={() => setShowNewProject(true)}
+                className="px-2 py-1 text-sm text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded-lg transition-colors whitespace-nowrap"
+              >
+                + New
+              </button>
+            </div>
+          </div>
+        </div>
+
         {/* Agent Mode & Approval Mode */}
         <div className="grid grid-cols-2 gap-4">
           <div>
             <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
               Agent Mode
             </label>
-            <select
+            <Dropdown
               value={agentMode}
-              onChange={(e) => setAgentMode(e.target.value as AgentMode)}
-              className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500"
-            >
-              <option value="default">Default</option>
-              <option value="plan">Plan (read-only)</option>
-            </select>
+              onChange={(v) => setAgentMode(v as AgentMode)}
+              options={[
+                { value: 'default', label: 'Default' },
+                { value: 'plan', label: 'Plan (read-only)' },
+              ]}
+            />
           </div>
 
           <div>
             <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
               Approval Mode
             </label>
-            <select
+            <Dropdown
               value={approvalMode}
-              onChange={(e) => setApprovalMode(e.target.value as ApprovalMode)}
-              className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500"
-            >
-              <option value="auto">Auto-approve</option>
-              <option value="manual">Manual approval</option>
-            </select>
+              onChange={(v) => setApprovalMode(v as ApprovalMode)}
+              options={[
+                { value: 'auto', label: 'Auto-approve' },
+                { value: 'manual', label: 'Manual approval' },
+              ]}
+            />
             <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
               {approvalMode === 'auto'
                 ? 'All tool calls will be auto-approved (recommended for scheduled tasks)'
@@ -403,6 +533,98 @@ export function ScheduledTaskCreateModal({ open, onClose, onCreated }: Scheduled
               </Button>
               <Button onClick={() => handleSelectDir(currentPath)}>
                 Select This Directory
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* New Personality Dialog */}
+      {showNewPersonality && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center">
+          <div className="fixed inset-0 bg-black/30" onClick={() => setShowNewPersonality(false)} />
+          <div className="relative bg-white dark:bg-gray-800 rounded-lg shadow-xl w-full max-w-md mx-4 p-4 space-y-3">
+            <h3 className="font-medium">Create Personality</h3>
+            <div className="grid grid-cols-2 gap-2">
+              <div>
+                <label className="block text-sm font-medium mb-1">Name</label>
+                <Input
+                  value={newPName}
+                  onChange={(e) => {
+                    setNewPName(e.target.value);
+                    if (!newPReadableId || newPReadableId === `@${nameToSlug(newPName)}`) {
+                      setNewPReadableId(`@${nameToSlug(e.target.value)}`);
+                    }
+                  }}
+                  placeholder="e.g. Mark"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium mb-1">@ID</label>
+                <Input
+                  value={newPReadableId}
+                  onChange={(e) => setNewPReadableId(e.target.value)}
+                  placeholder="@mark"
+                  className="font-mono"
+                />
+              </div>
+            </div>
+            <div>
+              <label className="block text-sm font-medium mb-1">Instructions</label>
+              <textarea
+                value={newPInstructions}
+                onChange={(e) => setNewPInstructions(e.target.value)}
+                placeholder="Define who this agent is..."
+                className="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 min-h-[80px]"
+              />
+            </div>
+            <div className="flex justify-end gap-2">
+              <Button variant="ghost" onClick={() => setShowNewPersonality(false)}>Cancel</Button>
+              <Button onClick={handleCreateNewPersonality} disabled={newPSaving || !newPName.trim() || !newPReadableId.trim() || !newPInstructions.trim()}>
+                {newPSaving ? <Spinner className="h-4 w-4" /> : 'Create'}
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* New Project Dialog */}
+      {showNewProject && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center">
+          <div className="fixed inset-0 bg-black/30" onClick={() => setShowNewProject(false)} />
+          <div className="relative bg-white dark:bg-gray-800 rounded-lg shadow-xl w-full max-w-md mx-4 p-4 space-y-3">
+            <h3 className="font-medium">Create Project</h3>
+            <div className="grid grid-cols-2 gap-2">
+              <div>
+                <label className="block text-sm font-medium mb-1">Name</label>
+                <Input
+                  value={newPrName}
+                  onChange={(e) => {
+                    setNewPrName(e.target.value);
+                    if (!newPrSlug || newPrSlug === nameToSlug(newPrName)) {
+                      setNewPrSlug(nameToSlug(e.target.value));
+                    }
+                  }}
+                  placeholder="Project name"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium mb-1">Slug</label>
+                <Input
+                  value={newPrSlug}
+                  onChange={(e) => setNewPrSlug(e.target.value)}
+                  placeholder="project-slug"
+                  className="font-mono"
+                />
+              </div>
+            </div>
+            <p className="text-xs text-gray-500">
+              Workspace: ~/.vibe-server/projects/{newPrSlug || 'slug'}/
+            </p>
+            <div className="flex justify-end gap-2">
+              <Button variant="ghost" onClick={() => setShowNewProject(false)}>Cancel</Button>
+              <Button onClick={handleCreateNewProject} disabled={newPrSaving || !newPrName.trim() || !newPrSlug.trim()}>
+                {newPrSaving ? <Spinner className="h-4 w-4" /> : 'Create'}
               </Button>
             </div>
           </div>
