@@ -655,6 +655,67 @@ export async function readFile(path: string): Promise<ReadFileResponse> {
   return fetchApi(`/api/filesystem/read?${params.toString()}`);
 }
 
+export function getRawFileUrl(path: string): string {
+  const params = new URLSearchParams({ path });
+  return `${getApiBase()}/api/filesystem/raw?${params.toString()}`;
+}
+
+export async function fetchRawFileAsBlob(filePath: string): Promise<string> {
+  const params = new URLSearchParams({ path: filePath });
+  const url = `${getApiBase()}/api/filesystem/raw?${params.toString()}`;
+  const headers: Record<string, string> = {};
+  const authKey = getAuthKey();
+  if (authKey) {
+    headers['Authorization'] = `Bearer ${authKey}`;
+  }
+
+  const response = await fetch(url, { headers });
+
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({ message: response.statusText }));
+    throw new Error(error.message || `API error: ${response.status}`);
+  }
+
+  const blob = await response.blob();
+  return URL.createObjectURL(blob);
+}
+
+export async function downloadDirectory(dirPath: string): Promise<void> {
+  const params = new URLSearchParams({ path: dirPath });
+  const url = `${getApiBase()}/api/filesystem/download?${params.toString()}`;
+  const headers: Record<string, string> = {};
+  const authKey = getAuthKey();
+  if (authKey) {
+    headers['Authorization'] = `Bearer ${authKey}`;
+  }
+
+  const response = await fetch(url, { headers });
+
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({ message: response.statusText }));
+    throw new Error(error.message || `API error: ${response.status}`);
+  }
+
+  const blob = await response.blob();
+
+  // Extract filename from Content-Disposition header, fallback to 'download.zip'
+  const disposition = response.headers.get('Content-Disposition');
+  let filename = 'download.zip';
+  if (disposition) {
+    const match = disposition.match(/filename="?([^"]+)"?/);
+    if (match) filename = match[1];
+  }
+
+  const objectUrl = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = objectUrl;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(objectUrl);
+}
+
 export async function deleteApiKey(
   provider: string
 ): Promise<{ status: string; provider: string }> {
