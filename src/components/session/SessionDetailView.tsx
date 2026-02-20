@@ -72,7 +72,6 @@ export function SessionDetailView({
   const [followUpImages, setFollowUpImages] = useState<ImageData[]>([]);
   const [submitting, setSubmitting] = useState(false);
   const [conversationTurns, setConversationTurns] = useState<ConversationTurn[]>([]);
-  const [showRaw, setShowRaw] = useState(false);
   const [activeTab, setActiveTab] = useState<SessionTab>('agent');
 
   // Session name editing
@@ -494,19 +493,6 @@ export function SessionDetailView({
             className="flex-1 overflow-y-auto"
           >
             <div className={`${maxWidthClass} mx-auto px-4 py-6 space-y-6`}>
-              {/* Show raw toggle */}
-              <div className="flex justify-end">
-                <label className="flex items-center gap-2 text-xs text-gray-500 cursor-pointer select-none">
-                  <input
-                    type="checkbox"
-                    checked={showRaw}
-                    onChange={(e) => setShowRaw(e.target.checked)}
-                    className="rounded border-gray-300 dark:border-gray-600 cursor-pointer"
-                  />
-                  Show raw logs
-                </label>
-              </div>
-
               {sortedTurns.length === 0 && (
                 <div className="text-center text-gray-500 py-12">
                   <p>No messages yet</p>
@@ -526,7 +512,6 @@ export function SessionDetailView({
                     liveLogs={shouldShowLiveLogs ? liveLogs : []}
                     isLive={isCurrentProcess}
                     isConnected={isConnected && logsMatchProcess}
-                    showRaw={showRaw}
                     connectorType={session.connectorType}
                   />
                 );
@@ -1424,8 +1409,7 @@ interface ParsedLogsResult {
 }
 
 function parseLogs(
-  logs: (LogMessage | ProcessLog)[],
-  showRaw: boolean
+  logs: (LogMessage | ProcessLog)[]
 ): ParsedLogsResult {
   const parsed = logs
     .flatMap((log) => {
@@ -1434,7 +1418,7 @@ function parseLogs(
       const parsedMessages = parseLogContent(content || '');
       return parsedMessages.map((p) => ({ raw: log, parsed: p, logType: logType || 'stdout' }));
     })
-    .filter((log) => showRaw || log.parsed.content !== '');
+    .filter((log) => log.parsed.content !== '');
 
   // Merge consecutive assistant messages
   const merged: typeof parsed = [];
@@ -1512,7 +1496,6 @@ function ConversationTurnView({
   liveLogs,
   isLive,
   isConnected,
-  showRaw,
   connectorType,
 }: {
   turn: ConversationTurn;
@@ -1520,7 +1503,6 @@ function ConversationTurnView({
   liveLogs: LogMessage[];
   isLive: boolean;
   isConnected: boolean;
-  showRaw: boolean;
   connectorType: string;
 }) {
   const { process, logs, isLoading } = turn;
@@ -1537,7 +1519,7 @@ function ConversationTurnView({
     : process.prompt;
 
   const displayLogs = isLive ? liveLogs : logs;
-  const { logs: parsedLogs, finalResult } = parseLogs(displayLogs, showRaw);
+  const { logs: parsedLogs, finalResult } = parseLogs(displayLogs);
 
   useEffect(() => {
     if (isLive && autoScroll && containerRef.current) {
@@ -1645,7 +1627,7 @@ function ConversationTurnView({
                       className="max-h-96 overflow-y-auto p-4 font-mono text-sm space-y-2 border-t border-gray-200 dark:border-gray-700"
                     >
                       {parsedLogs.map((log, index) => (
-                        <ParsedLogLine key={index} log={log} showRaw={showRaw} />
+                        <ParsedLogLine key={index} log={log} />
                       ))}
                     </div>
                   )}
@@ -1676,7 +1658,7 @@ function ConversationTurnView({
                   className="max-h-96 overflow-y-auto p-4 font-mono text-sm space-y-2"
                 >
                   {parsedLogs.map((log, index) => (
-                    <ParsedLogLine key={index} log={log} showRaw={showRaw} />
+                    <ParsedLogLine key={index} log={log} />
                   ))}
                 </div>
               )}
@@ -1737,25 +1719,13 @@ function ConversationTurnView({
 // Parsed Log Line Component
 function ParsedLogLine({
   log,
-  showRaw,
 }: {
   log: { raw: LogMessage | ProcessLog; parsed: ParsedMessage; logType: string };
-  showRaw: boolean;
 }) {
   const { parsed, logType } = log;
   const content = ensureString(parsed.content);
 
-  if (!showRaw && !content) return null;
-
-  if (showRaw) {
-    const rawContent = 'content' in log.raw ? log.raw.content : JSON.stringify(log.raw);
-    return (
-      <div className="text-gray-500 whitespace-pre-wrap break-all text-xs">
-        <span className="text-gray-400">[{logType}] </span>
-        {rawContent}
-      </div>
-    );
-  }
+  if (!content) return null;
 
   switch (parsed.type) {
     case 'assistant':

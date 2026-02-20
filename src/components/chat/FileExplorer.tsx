@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef, useCallback } from 'react';
 import ReactMarkdown from 'react-markdown';
-import { listDirectory, readFile, getRawFileUrl, fetchRawFileAsBlob, downloadDirectory, type FileEntry } from '@/lib/api';
+import { listDirectory, readFile, getRawFileUrl, fetchRawFileAsBlob, downloadDirectory, downloadFile, type FileEntry } from '@/lib/api';
 import { Button, Spinner } from '@/components/ui';
 
 interface Column {
@@ -120,6 +120,7 @@ export function FileExplorer({ initialPath, mode, onSelect, onCancel }: FileExpl
   const [previewLoading, setPreviewLoading] = useState(false);
   const [previewError, setPreviewError] = useState<string | null>(null);
   const [audioBlobUrl, setAudioBlobUrl] = useState<string | null>(null);
+  const [showRawMarkdown, setShowRawMarkdown] = useState(false);
 
   const loadDirectory = useCallback(async (path: string): Promise<{ entries: FileEntry[]; resolvedPath: string } | null> => {
     try {
@@ -192,8 +193,12 @@ export function FileExplorer({ initialPath, mode, onSelect, onCancel }: FileExpl
     if (!selectedPath || selectedType !== 'file') {
       setPreviewContent(null);
       setPreviewError(null);
+      setShowRawMarkdown(false);
       return;
     }
+
+    // Reset raw markdown toggle when file changes
+    setShowRawMarkdown(false);
 
     const category = getFileCategory(selectedPath);
 
@@ -325,6 +330,26 @@ export function FileExplorer({ initialPath, mode, onSelect, onCancel }: FileExpl
     }
 
     if (fileCategory === 'markdown' && previewContent !== null) {
+      if (showRawMarkdown) {
+        const lines = previewContent.split('\n');
+        const gutterWidth = String(lines.length).length;
+        return (
+          <div className="text-sm font-mono overflow-x-auto">
+            <table className="border-collapse w-full">
+              <tbody>
+                {lines.map((line, i) => (
+                  <tr key={i} className="hover:bg-gray-100 dark:hover:bg-gray-800/50">
+                    <td className="select-none text-right pr-3 pl-2 text-gray-400 dark:text-gray-600 align-top" style={{ minWidth: `${gutterWidth + 2}ch` }}>
+                      {i + 1}
+                    </td>
+                    <td className="whitespace-pre pr-4">{line}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        );
+      }
       return (
         <div className="prose prose-sm dark:prose-invert max-w-none">
           <ReactMarkdown>{previewContent}</ReactMarkdown>
@@ -424,7 +449,7 @@ export function FileExplorer({ initialPath, mode, onSelect, onCancel }: FileExpl
                             </svg>
                           )}
                           <span className="truncate">{entry.name}</span>
-                          {entry.type === 'directory' && (
+                          {entry.type === 'directory' ? (
                             <>
                               {isDownloading ? (
                                 <Spinner className="w-3.5 h-3.5 ml-auto shrink-0" />
@@ -449,6 +474,26 @@ export function FileExplorer({ initialPath, mode, onSelect, onCancel }: FileExpl
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
                               </svg>
                             </>
+                          ) : (
+                            isDownloading ? (
+                              <Spinner className="w-3.5 h-3.5 ml-auto shrink-0" />
+                            ) : (
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setDownloadingPath(entry.path);
+                                  downloadFile(entry.path)
+                                    .catch(() => {})
+                                    .finally(() => setDownloadingPath(null));
+                                }}
+                                className={`ml-auto shrink-0 opacity-0 group-hover/entry:opacity-100 transition-opacity p-0.5 rounded hover:bg-black/10 dark:hover:bg-white/10 ${isSelected ? 'text-white' : 'text-gray-400 hover:text-gray-600 dark:hover:text-gray-200'}`}
+                                title="Download file"
+                              >
+                                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                                </svg>
+                              </button>
+                            )
                           )}
                         </div>
                       );
@@ -472,6 +517,38 @@ export function FileExplorer({ initialPath, mode, onSelect, onCancel }: FileExpl
               <span className="text-xs text-gray-400 truncate ml-1">
                 {selectedPath?.split('/').pop()}
               </span>
+              <div className="flex items-center gap-2 ml-auto">
+                {fileCategory === 'markdown' && (
+                  <button
+                    onClick={() => setShowRawMarkdown(!showRawMarkdown)}
+                    className="text-xs px-2 py-1 rounded border border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors cursor-pointer"
+                    title={showRawMarkdown ? 'Show rendered preview' : 'Show raw markdown'}
+                  >
+                    {showRawMarkdown ? 'Preview' : 'Raw'}
+                  </button>
+                )}
+                {/* Download button */}
+                {selectedPath && (
+                  downloadingPath === selectedPath ? (
+                    <Spinner className="w-4 h-4" />
+                  ) : (
+                    <button
+                      onClick={() => {
+                        setDownloadingPath(selectedPath);
+                        downloadFile(selectedPath)
+                          .catch(() => {})
+                          .finally(() => setDownloadingPath(null));
+                      }}
+                      className="p-1.5 rounded border border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors cursor-pointer"
+                      title="Download file"
+                    >
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                      </svg>
+                    </button>
+                  )
+                )}
+              </div>
             </div>
             <div className="flex-1 overflow-y-auto p-6">
               {renderPreviewContent()}

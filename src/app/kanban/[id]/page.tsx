@@ -1,11 +1,18 @@
 'use client';
 
-import { useParams } from 'next/navigation';
-import { KanbanView } from '@/components/layout/KanbanView';
+import { useEffect } from 'react';
+import { useRouter } from 'next/navigation';
+import { useViewMode } from '@/contexts/ViewModeContext';
 
 export default function KanbanSessionPage() {
-  const params = useParams();
-  const sessionId = params.id as string;
+  const router = useRouter();
+  const { setViewMode } = useViewMode();
 
-  return <KanbanView initialSessionId={sessionId} />;
+  useEffect(() => {
+    // Set view mode to kanban and redirect to main page
+    setViewMode('kanban');
+    router.replace('/');
+  }, [router, setViewMode]);
+
+  return null;
 }

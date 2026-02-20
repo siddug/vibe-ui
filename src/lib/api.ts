@@ -474,6 +474,10 @@ export async function getSessions(params?: GetSessionsParams): Promise<SessionsR
   return fetchApi(`/api/sessions${query ? `?${query}` : ''}`);
 }
 
+export async function getSessionWorkDirs(): Promise<{ workDirs: string[] }> {
+  return fetchApi('/api/sessions/work-dirs');
+}
+
 export async function getSession(id: string): Promise<Session> {
   return fetchApi(`/api/sessions/${id}`);
 }
@@ -705,6 +709,37 @@ export async function downloadDirectory(dirPath: string): Promise<void> {
     const match = disposition.match(/filename="?([^"]+)"?/);
     if (match) filename = match[1];
   }
+
+  const objectUrl = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = objectUrl;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(objectUrl);
+}
+
+export async function downloadFile(filePath: string): Promise<void> {
+  const params = new URLSearchParams({ path: filePath });
+  const url = `${getApiBase()}/api/filesystem/raw?${params.toString()}`;
+  const headers: Record<string, string> = {};
+  const authKey = getAuthKey();
+  if (authKey) {
+    headers['Authorization'] = `Bearer ${authKey}`;
+  }
+
+  const response = await fetch(url, { headers });
+
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({ message: response.statusText }));
+    throw new Error(error.message || `API error: ${response.status}`);
+  }
+
+  const blob = await response.blob();
+
+  // Use the filename from the path
+  const filename = filePath.split('/').pop() || 'download';
 
   const objectUrl = URL.createObjectURL(blob);
   const a = document.createElement('a');

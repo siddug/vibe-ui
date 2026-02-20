@@ -1,14 +1,12 @@
 'use client';
 
-import { createContext, useContext, ReactNode } from 'react';
-import { useRouter, usePathname } from 'next/navigation';
+import { createContext, useContext, useState, ReactNode, useEffect } from 'react';
 
-export type ViewMode = 'sidebar' | 'kanban';
+export type ViewMode = 'kanban' | 'sessions' | 'files';
 
 interface ViewModeContextType {
   viewMode: ViewMode;
   setViewMode: (mode: ViewMode) => void;
-  toggleViewMode: () => void;
 }
 
 const ViewModeContext = createContext<ViewModeContextType | undefined>(undefined);
@@ -17,31 +15,33 @@ interface ViewModeProviderProps {
   children: ReactNode;
 }
 
-export function ViewModeProvider({ children }: ViewModeProviderProps) {
-  const router = useRouter();
-  const pathname = usePathname();
+const STORAGE_KEY = 'vibex-view-mode';
 
-  // Derive view mode from the current URL
-  const viewMode: ViewMode = pathname.startsWith('/kanban') ? 'kanban' : 'sidebar';
+export function ViewModeProvider({ children }: ViewModeProviderProps) {
+  const [viewMode, setViewModeState] = useState<ViewMode>('kanban');
+  const [isHydrated, setIsHydrated] = useState(false);
+
+  // Load saved view mode from localStorage on mount
+  useEffect(() => {
+    const saved = localStorage.getItem(STORAGE_KEY) as ViewMode | null;
+    if (saved && ['kanban', 'sessions', 'files'].includes(saved)) {
+      setViewModeState(saved);
+    }
+    setIsHydrated(true);
+  }, []);
 
   const setViewMode = (mode: ViewMode) => {
-    if (mode === 'kanban') {
-      router.push('/kanban');
-    } else {
-      router.push('/');
-    }
+    setViewModeState(mode);
+    localStorage.setItem(STORAGE_KEY, mode);
   };
 
-  const toggleViewMode = () => {
-    if (viewMode === 'kanban') {
-      router.push('/');
-    } else {
-      router.push('/kanban');
-    }
-  };
+  // Avoid hydration mismatch by not rendering until hydrated
+  if (!isHydrated) {
+    return null;
+  }
 
   return (
-    <ViewModeContext.Provider value={{ viewMode, setViewMode, toggleViewMode }}>
+    <ViewModeContext.Provider value={{ viewMode, setViewMode }}>
       {children}
     </ViewModeContext.Provider>
   );

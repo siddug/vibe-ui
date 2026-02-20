@@ -2,7 +2,6 @@ import type { Metadata } from "next";
 import "./globals.css";
 import { ServerProvider } from "@/contexts/ServerContext";
 import { ThemeProvider } from "@/contexts/ThemeContext";
-import { SidebarProvider } from "@/contexts/SidebarContext";
 import { ViewModeProvider } from "@/contexts/ViewModeContext";
 import { AppShell } from "@/components/layout/AppShell";
 
@@ -31,9 +30,7 @@ export default function RootLayout({
         <ServerProvider>
           <ThemeProvider>
             <ViewModeProvider>
-              <SidebarProvider>
-                <AppShell>{children}</AppShell>
-              </SidebarProvider>
+              <AppShell>{children}</AppShell>
             </ViewModeProvider>
           </ThemeProvider>
         </ServerProvider>

@@ -1,17 +1,18 @@
 'use client';
 
-import { useParams, useRouter } from 'next/navigation';
-import { SessionDetailView } from '@/components/session/SessionDetailView';
+import { useEffect } from 'react';
+import { useRouter } from 'next/navigation';
+import { useViewMode } from '@/contexts/ViewModeContext';
 
 export default function SessionDetailPage() {
-  const params = useParams();
   const router = useRouter();
-  const sessionId = params.id as string;
+  const { setViewMode } = useViewMode();
 
-  return (
-    <SessionDetailView
-      sessionId={sessionId}
-      onNavigateHome={() => router.push('/')}
-    />
-  );
+  useEffect(() => {
+    // Sessions are now viewed within the Sessions view
+    setViewMode('sessions');
+    router.replace('/');
+  }, [router, setViewMode]);
+
+  return null;
 }
